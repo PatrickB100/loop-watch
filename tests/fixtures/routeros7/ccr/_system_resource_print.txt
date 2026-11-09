@@ -1,0 +1,4 @@
+                   uptime: 3d2h14m
+                  version: 7.16.1 (stable)
+               build-time: 2024-10-10 14:00:00
+              board-name: CCR2116-12G-4S+

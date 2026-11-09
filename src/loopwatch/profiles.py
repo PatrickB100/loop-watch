@@ -7,6 +7,7 @@ from datetime import datetime
 
 from loopwatch.inventory import COMMANDS, InventoryError
 from loopwatch.model import Snapshot
+from loopwatch.parsers.mikrotik import MIKROTIK_COMMANDS, parse_mikrotik_snapshot
 from loopwatch.parsers.snapshot import parse_snapshot
 
 
@@ -29,7 +30,16 @@ CISCO_IOS = Profile(
     version_pattern=r"Version ([^,\s]+)",
 )
 
-PROFILES: tuple[Profile, ...] = (CISCO_IOS,)
+MIKROTIK_ROUTEROS = Profile(
+    family="mikrotik_routeros",
+    device_types=frozenset({"mikrotik_routeros"}),
+    commands=MIKROTIK_COMMANDS,
+    parse=parse_mikrotik_snapshot,
+    version_command="/system resource print",
+    version_pattern=r"version:\s*(\S+)",
+)
+
+PROFILES: tuple[Profile, ...] = (CISCO_IOS, MIKROTIK_ROUTEROS)
 
 
 def profile_for(device_type: str) -> Profile:

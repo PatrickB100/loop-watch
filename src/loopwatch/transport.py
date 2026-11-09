@@ -17,7 +17,8 @@ class Transport(Protocol):
 
 
 def command_slug(command: str) -> str:
-    return command.replace(" ", "_")
+    """File-name form of a command: `show logging` -> show_logging, `/log print` -> _log_print."""
+    return command.replace(" ", "_").replace("/", "_")
 
 
 class FakeTransport:

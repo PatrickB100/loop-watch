@@ -9,6 +9,7 @@ FLAP_WINDOW = timedelta(minutes=5)
 FLAP_COUNT = 3
 
 _LINK_IFACE = re.compile(r"Interface (\S+?),")
+_LINK_IFACE_ROS = re.compile(r"^(\S+) link (?:up|down)")  # RouterOS: "ether5 link down"
 _ERR_DISABLE_IFACE = re.compile(r"putting (\S+) in err-disable", re.I)
 _ERR_DISABLE_ON = re.compile(r"detected on (\S+?)[, ]")
 
@@ -18,7 +19,7 @@ def _link_flaps_from_log(ctx: DetectorContext) -> dict[str, int]:
     for line in new_log_lines(ctx):
         if line.mnemonic != "LINK-3-UPDOWN":
             continue
-        m = _LINK_IFACE.search(line.text)
+        m = _LINK_IFACE.search(line.text) or _LINK_IFACE_ROS.match(line.text)
         if m:
             port = normalize_port(m.group(1))
             counts[port] = counts.get(port, 0) + 1

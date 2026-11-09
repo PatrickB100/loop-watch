@@ -1,0 +1,7 @@
+ nov/08/2025 09:00:00 system,info,account user admin logged in from 10.0.0.9 via ssh
+ nov/08 23:59:58 dhcp,info dhcp-lan assigned 10.0.10.183 for A4:B1:C2:D3:E4:F5 tp-link-switch
+ 10:42:11 interface,info ether5 link down
+ 10:42:12 interface,info ether5 link up (speed 1G, full duplex)
+ 10:42:30 bridge,stp bridge1: topology change
+ 10:43:00 system,error,critical login failure for user x from 10.0.0.99 via ssh
+ 10:43:05 firewall,info forward: in:bridge1 out:ether1, src-mac aa:bb:cc:dd:ee:ff, proto TCP

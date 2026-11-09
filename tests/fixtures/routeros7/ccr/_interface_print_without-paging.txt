@@ -1,0 +1,9 @@
+Flags: D - DYNAMIC; X - DISABLED, R - RUNNING; S - SLAVE
+Columns: NAME, TYPE, ACTUAL-MTU, L2MTU, MAX-L2MTU, MAC-ADDRESS
+#    NAME          TYPE    ACTUAL-MTU  L2MTU  MAX-L2MTU  MAC-ADDRESS
+0  R ether1        ether         1500   1592      10218  DC:2C:6E:00:00:01
+1    ether2        ether         1500   1592      10218  DC:2C:6E:00:00:02
+2  X ether3        ether         1500   1592      10218  DC:2C:6E:00:00:03
+3 RS ether5        ether         1500   1592      10218  DC:2C:6E:00:00:05
+4  R sfp-sfpplus1  ether         1500   1592      10218  DC:2C:6E:00:00:0D
+5  R bridge1       bridge        1500   1592             DC:2C:6E:00:00:01
