@@ -66,7 +66,7 @@ def main(ctx: click.Context, inventory_path: Path, db_path: Path) -> None:
 def watch(ctx: click.Context) -> None:
     """Poll every switch continuously until stopped."""
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", stream=sys.stderr)
-    inv = _inventory(ctx.obj["inventory_path"])
+    inventory_path: Path = ctx.obj["inventory_path"]
     stop = asyncio.Event()
 
     async def run() -> None:
@@ -74,9 +74,9 @@ def watch(ctx: click.Context) -> None:
         for sig in (signal.SIGINT, signal.SIGTERM):
             loop.add_signal_handler(sig, stop.set)
         with _open_store(ctx.obj["db_path"]) as store:
-            await run_collector(inv, NetmikoTransport(), store, stop=stop)
+            await run_collector(lambda: load_inventory(inventory_path, os.environ), NetmikoTransport(), store,
+                                stop=stop, inventory_path=inventory_path)
 
-    logging.getLogger("loopwatch").info("watching %d switches", len(inv.switches))
     asyncio.run(run())
 
 

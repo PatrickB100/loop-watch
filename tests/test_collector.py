@@ -5,9 +5,10 @@ from datetime import timedelta
 import pytest
 
 from loopwatch.collector import Escalation, poll_once, run_collector
+from loopwatch.inventory import Inventory, InventoryError, Switch
 from loopwatch.store import Store
 from loopwatch.transport import FakeTransport
-from tests.conftest import NOW
+from tests.conftest import FIXTURES, NOW
 
 
 @pytest.fixture
@@ -102,7 +103,7 @@ async def test_run_collector_polls_each_switch_and_stops(store, inv, fake):
             stop.set()
         await asyncio.sleep(0)
 
-    await run_collector(inv, fake, store, clock=lambda: NOW, sleep=fake_sleep, stop=stop, escalation=esc)
+    await run_collector(lambda: inv, fake, store, clock=lambda: NOW, sleep=fake_sleep, stop=stop, escalation=esc)
     assert {c[0] for c in fake.calls} == {"sw-a", "sw-core-1"}
     assert 10 in sleeps
     assert esc.interval("sw-a", 60, NOW) == 10  # sw-a's unexpected_neighbor escalated it
@@ -121,4 +122,55 @@ async def test_store_error_stops_collector(store, inv, fake, monkeypatch):
         await asyncio.sleep(0)
 
     with pytest.raises(sqlite3.OperationalError):
-        await run_collector(inv, fake, store, clock=lambda: NOW, sleep=fake_sleep, stop=stop)
+        await run_collector(lambda: inv, fake, store, clock=lambda: NOW, sleep=fake_sleep, stop=stop)
+
+
+async def test_reload_adds_removes_and_restarts_devices(store, fake, creds):
+    inv = {"v": Inventory((Switch(name="sw-a", host="10.0.0.5"),), {"ssh": creds})}
+    stop, reload = asyncio.Event(), asyncio.Event()
+
+    async def fake_sleep(seconds):
+        await asyncio.sleep(0)
+        if len(fake.calls) == 2:  # sw-a polled twice: add sw-core-1, change sw-a's interval
+            inv["v"] = Inventory((Switch(name="sw-a", host="10.0.0.5", poll_interval=30),
+                                  Switch(name="sw-core-1", host="10.0.0.1")), {"ssh": creds})
+            reload.set()
+        if len(fake.calls) >= 6:
+            stop.set()
+
+    await run_collector(lambda: inv["v"], fake, store, stop=stop, reload=reload, clock=lambda: NOW,
+                        sleep=fake_sleep, check_interval=1000)
+    names = [c[0] for c in fake.calls]
+    assert names[:2] == ["sw-a", "sw-a"] and "sw-core-1" in names[2:]
+
+
+async def test_reload_failure_keeps_running_set(store, fake, inv):
+    stop, reload = asyncio.Event(), asyncio.Event()
+    errors: list[str | None] = []
+    state = {"fail": False}
+
+    def load():
+        if state["fail"]:
+            raise InventoryError("bad yaml")
+        return inv
+
+    async def fake_sleep(seconds):
+        await asyncio.sleep(0)
+        if len(fake.calls) == 2 and not state["fail"]:
+            state["fail"] = True
+            reload.set()
+        if len(fake.calls) >= 4:
+            stop.set()
+
+    await run_collector(load, fake, store, stop=stop, reload=reload, clock=lambda: NOW, sleep=fake_sleep,
+                        check_interval=1000, on_inventory_error=errors.append)
+    assert errors[0] is None and "bad yaml" in (errors[-1] or "")
+    assert {c[0] for c in fake.calls} == {"sw-a", "sw-core-1"}
+
+
+def test_poll_once_upserts_dhcp_hosts(store, creds):
+    fake = FakeTransport(FIXTURES / "routeros7")
+    ccr = Switch(name="ccr", host="10.0.0.254", device_type="mikrotik_routeros", credentials="mikrotik")
+    inv = Inventory((ccr,), {"mikrotik": creds})
+    poll_once(ccr, inv, fake, store, None, NOW)
+    assert store.hosts_for({"a4b1.c2d3.e4f5"})["a4b1.c2d3.e4f5"].hostname == "tp-link-switch"
