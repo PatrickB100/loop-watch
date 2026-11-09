@@ -1,11 +1,12 @@
-from collections.abc import Set
-from dataclasses import dataclass, field
+from collections.abc import Callable, Set
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone, tzinfo
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from jinja2 import Environment, PackageLoader
 
 from loopwatch.model import Event, LogLine
+from loopwatch.report.diagnosis import Diagnosis, diagnose, vendor_of
 from loopwatch.report.ranking import (
     ChainHop,
     Suspect,
@@ -26,6 +27,7 @@ class ReportData:
     log_lines: list[tuple[datetime, str, LogLine]] = field(default_factory=list)  # (polled at, device, line)
     uplinks: frozenset[tuple[str, str]] = frozenset()
     ap_ports: frozenset[tuple[str, str]] = frozenset()
+    diagnosis: Diagnosis | None = None
 
 
 def resolve_tz(name: str | None) -> tzinfo:
@@ -39,7 +41,12 @@ def resolve_tz(name: str | None) -> tzinfo:
 
 
 def build_report(
-    store: Store, managed: Set[str], since: datetime, until: datetime, ap_ports: Set[tuple[str, str]] = frozenset()
+    store: Store,
+    managed: Set[str],
+    since: datetime,
+    until: datetime,
+    ap_ports: Set[tuple[str, str]] = frozenset(),
+    vendor: Callable[[str], str] = vendor_of,
 ) -> ReportData:
     events = store.events(since, until)
     switches = store.switches()
@@ -60,7 +67,8 @@ def build_report(
                 best = hops
         if best:
             chains[vlan] = best
-    return ReportData((since, until), suspects, events, chains, store.log_lines(since, until), uplinks, aps)
+    data = ReportData((since, until), suspects, events, chains, store.log_lines(since, until), uplinks, aps)
+    return replace(data, diagnosis=diagnose(store, data, vendor))
 
 
 def _kinds_summary(suspect: Suspect) -> str:
@@ -88,6 +96,22 @@ def _fmt_clock(t: datetime | None, tz: tzinfo = timezone.utc) -> str:
 def render_text(data: ReportData, tz: tzinfo = timezone.utc) -> str:
     since, until = data.window
     out = [f"loop-watch report  {_fmt_time(since, tz)} .. {_fmt_time(until, tz)}", ""]
+    d = data.diagnosis
+    if d is not None:
+        out.append("Diagnosis")
+        out.append(f"  {d.headline} (first event {_fmt_clock(d.first_event, tz)})")
+        if d.connected:
+            caps = ",".join(sorted(d.connected.capabilities))
+            out.append(f"  Connected device: {d.connected.name} ({d.connected.platform}, {caps})")
+        for title, hosts in (("On this port before", d.attached), ("Flapped through it", d.flapping)):
+            if hosts:
+                out.append(f"  {title}:")
+                for h in hosts:
+                    other = f"  other port {h.other_port}" if h.other_port else ""
+                    out.append(f"    {h.mac}  {h.vendor}  {h.hostname or '-'}  {h.ip or '-'}{other}")
+        for note in d.notes:
+            out.append(f"  Note: {note}")
+        out.append("")
     out.append("Suspects")
     if not data.suspects:
         out.append("  (no events in this window)")

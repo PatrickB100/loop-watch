@@ -1,6 +1,32 @@
 {# Report sections; included by the standalone report page and by the web layout. #}
 <p class="muted">{{ data.window[0] | fmt_time }} .. {{ data.window[1] | fmt_time }}</p>
 
+{% if data.diagnosis %}
+{% set d = data.diagnosis %}
+<h2>Diagnosis</h2>
+<div class="diagnosis">
+<p><b>{{ d.headline }}</b> <span class="muted">(first event {{ d.first_event | clock }})</span></p>
+<table>
+{% if d.connected %}
+<tr><th>Connected device</th><td colspan="4">{{ d.connected.name }} ({{ d.connected.platform }}, {{ d.connected.capabilities | sort | join(",") }}) via CDP/LLDP</td></tr>
+{% endif %}
+{% if d.attached %}
+<tr><th>On this port before</th><th>MAC</th><th>Vendor</th><th>Host (DHCP)</th><th>IP</th></tr>
+{% for h in d.attached %}
+<tr><td></td><td><code>{{ h.mac }}</code></td><td>{{ h.vendor }}</td><td>{{ h.hostname or "-" }}</td><td><code>{{ h.ip or "-" }}</code></td></tr>
+{% endfor %}
+{% endif %}
+{% if d.flapping %}
+<tr><th>Flapped through it</th><th>MAC</th><th>Vendor</th><th>Host (DHCP)</th><th>Other port</th></tr>
+{% for h in d.flapping %}
+<tr><td></td><td><code>{{ h.mac }}</code></td><td>{{ h.vendor }}</td><td>{{ h.hostname or "-" }}</td><td><code>{{ h.other_port or "-" }}</code></td></tr>
+{% endfor %}
+{% endif %}
+</table>
+{% for note in d.notes %}<p class="muted">{{ note }}</p>{% endfor %}
+</div>
+{% endif %}
+
 <h2>Suspects</h2>
 {% if data.suspects %}
 <table>
