@@ -68,3 +68,14 @@ def test_new_log_lines_excludes_seen():
     prev = make_snapshot(log_lines=(a,))
     cur = make_snapshot(log_lines=(a, b))
     assert new_log_lines(DetectorContext(prev, cur, {}, [], frozenset())) == (b,)
+
+
+def test_flap_events_carry_the_other_port():
+    prev = make_snapshot(macs=(MacEntry(10, "aaaa.bbbb.cccc", "Gi1/0/7"),))
+    cur = make_snapshot(
+        macs=(MacEntry(10, "aaaa.bbbb.cccc", "Gi1/0/14"),),
+        log_lines=(make_log("SW_MATM-4-MACFLAP_NOTIF",
+                            "Host aaaa.bbbb.cccc in vlan 10 is flapping between port Gi1/0/7 and port Gi1/0/14"),),
+    )
+    events = mac.detect(ctx(prev, cur))
+    assert {(e.port, e.other_port) for e in events} == {("Gi1/0/14", "Gi1/0/7"), ("Gi1/0/7", "Gi1/0/14")}

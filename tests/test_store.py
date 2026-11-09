@@ -3,7 +3,7 @@ from datetime import timedelta
 
 import pytest
 
-from loopwatch.model import Event
+from loopwatch.model import Event, Host
 from loopwatch.store import Store
 from tests.conftest import NOW
 
@@ -132,3 +132,41 @@ def test_record_poll_stores_only_new_log_lines_and_latest_snapshot_unions_them(s
     assert store.conn.execute("SELECT count(*) FROM log_lines").fetchone()[0] == len(snap_a.log_lines)
     got = store.latest_snapshot("sw-a")
     assert got is not None and set(got.log_lines) == set(snap_a.log_lines)
+
+
+def test_v1_schema_is_upgraded_in_place(tmp_path):
+    import sqlite3
+
+    path = tmp_path / "v1.sqlite"
+    con = sqlite3.connect(path)
+    con.executescript("""CREATE TABLE switches (id INTEGER PRIMARY KEY, name TEXT UNIQUE NOT NULL, host TEXT NOT NULL, model TEXT, last_seen TEXT);
+      CREATE TABLE events (id INTEGER PRIMARY KEY, time TEXT NOT NULL, switch_id INTEGER NOT NULL REFERENCES switches(id),
+      kind TEXT NOT NULL, severity TEXT NOT NULL, port TEXT, vlan INTEGER, mac TEXT, reason TEXT NOT NULL);
+      INSERT INTO switches(name, host) VALUES ('sw-a', 'h');
+      INSERT INTO events(time, switch_id, kind, severity, reason) VALUES ('2026-11-09T09:00:00+00:00', 1, 'mac_flap', 'high', 'old');""")
+    con.commit()
+    con.close()
+    with Store(path) as s:
+        s.init_schema()
+        evs = s.events(NOW - timedelta(days=1), NOW)
+        assert len(evs) == 1 and evs[0].other_port is None
+        s.write_events([Event(NOW, "sw-a", "mac_flap", "high", "r", port="Gi1/0/14", mac="aaaa.bbbb.cccc", other_port="Gi1/0/7")])
+        assert s.events(NOW - timedelta(days=1), NOW)[-1].other_port == "Gi1/0/7"
+
+
+def test_hosts_upsert_latest_wins_and_prunes(store):
+    store.upsert_hosts([Host("aaaa.bbbb.cccc", "10.0.0.9", "laptop", True)], "dhcp:ccr", NOW - timedelta(days=200))
+    store.upsert_hosts([Host("aaaa.bbbb.cccc", "10.0.0.10", "laptop", True)], "dhcp:ccr", NOW)
+    assert store.hosts_for({"aaaa.bbbb.cccc"})["aaaa.bbbb.cccc"].ip == "10.0.0.10"
+    store.upsert_hosts([Host("1111.2222.3333", None, None, False)], "dhcp:ccr", NOW - timedelta(days=200))
+    store.prune(NOW)
+    assert set(store.hosts_for({"aaaa.bbbb.cccc", "1111.2222.3333"})) == {"aaaa.bbbb.cccc"}
+
+
+def test_log_lines_last_poll_and_mac_ports(store, snap_a):
+    store.record_poll("sw-a", "10.0.0.5", NOW, NOW, snap_a, None)
+    lines = store.log_lines(NOW - timedelta(minutes=1), NOW)
+    assert lines and lines[0][1] == "sw-a" and lines[0][0] == NOW
+    assert store.last_poll("sw-a") == (NOW, True, None) and store.last_poll("nope") is None
+    ports = store.mac_ports("sw-a", NOW - timedelta(minutes=1), NOW)
+    assert all(isinstance(v, set) for v in ports.values()) and len(ports) == len({m.mac for m in snap_a.macs})
