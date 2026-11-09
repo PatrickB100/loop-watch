@@ -1,0 +1,22 @@
+Cisco IOS XE Software, Version 17.03.04
+Cisco IOS Software [Amsterdam], Catalyst L3 Switch Software (CAT9K_IOSXE), Version 17.3.4, RELEASE SOFTWARE (fc1)
+Technical Support: http://www.cisco.com/techsupport
+Copyright (c) 1986-2021 by Cisco Systems, Inc.
+Compiled Sun 04-Jul-21 18:38 by mcpre
+
+sw-9300 uptime is 8 weeks, 2 days, 1 hour, 7 minutes
+Uptime for this control processor is 8 weeks, 2 days, 1 hour, 9 minutes
+System returned to ROM by Reload Command
+System image file is "flash:packages.conf"
+Last reload reason: Reload Command
+
+cisco C9300-48P (X86) processor with 1331521K/6147K bytes of memory.
+Processor board ID FOC0000Y000
+Model Number                       : C9300-48P
+System Serial Number               : FOC0000Y000
+
+Switch Ports Model              SW Version        SW Image              Mode   
+------ ----- -----              ----------        ----------            ----   
+*    1 65    C9300-48P          17.03.04          CAT9K_IOSXE           INSTALL
+
+Configuration register is 0x102

@@ -1,0 +1,48 @@
+          Mac Address Table
+-------------------------------------------
+
+Vlan    Mac Address       Type        Ports
+----    -----------       --------    -----
+  10    aabb.cc00.0001    DYNAMIC     Gi1/0/1
+  10    aabb.cc00.0002    DYNAMIC     Gi1/0/14
+  10    aabb.cc00.0100    DYNAMIC     Gi1/0/48
+  10    aabb.cc00.0101    DYNAMIC     Gi1/0/48
+  10    aabb.cc00.0102    DYNAMIC     Gi1/0/48
+  10    aabb.cc00.0103    DYNAMIC     Gi1/0/48
+  10    aabb.cc00.0104    DYNAMIC     Gi1/0/48
+  10    aabb.cc00.0105    DYNAMIC     Gi1/0/48
+  10    aabb.cc00.0106    DYNAMIC     Gi1/0/48
+  10    aabb.cc00.0107    DYNAMIC     Gi1/0/48
+  10    aabb.cc00.0108    DYNAMIC     Gi1/0/48
+  10    aabb.cc00.0109    DYNAMIC     Gi1/0/48
+  10    aabb.cc00.010a    DYNAMIC     Gi1/0/48
+  10    aabb.cc00.010b    DYNAMIC     Gi1/0/48
+  10    aabb.cc00.010c    DYNAMIC     Gi1/0/48
+  10    aabb.cc00.010d    DYNAMIC     Gi1/0/48
+  10    aabb.cc00.010e    DYNAMIC     Gi1/0/48
+  10    aabb.cc00.010f    DYNAMIC     Gi1/0/48
+  10    aabb.cc00.0110    DYNAMIC     Gi1/0/48
+  10    aabb.cc00.0111    DYNAMIC     Gi1/0/48
+  10    aabb.cc00.0112    DYNAMIC     Gi1/0/48
+  10    aabb.cc00.0113    DYNAMIC     Gi1/0/48
+  10    aabb.cc00.0114    DYNAMIC     Gi1/0/48
+  10    aabb.cc00.0115    DYNAMIC     Gi1/0/48
+  10    aabb.cc00.0116    DYNAMIC     Gi1/0/48
+  10    aabb.cc00.0117    DYNAMIC     Gi1/0/48
+  10    aabb.cc00.0118    DYNAMIC     Gi1/0/48
+  10    aabb.cc00.0119    DYNAMIC     Gi1/0/48
+  10    aabb.cc00.011a    DYNAMIC     Gi1/0/48
+  10    aabb.cc00.011b    DYNAMIC     Gi1/0/48
+  10    aabb.cc00.011c    DYNAMIC     Gi1/0/48
+  10    aabb.cc00.011d    DYNAMIC     Gi1/0/48
+  10    aabb.cc00.011e    DYNAMIC     Gi1/0/48
+  10    aabb.cc00.011f    DYNAMIC     Gi1/0/48
+  10    aabb.cc00.0120    DYNAMIC     Gi1/0/48
+  10    aabb.cc00.0121    DYNAMIC     Gi1/0/48
+  10    aabb.cc00.0122    DYNAMIC     Gi1/0/48
+  10    aabb.cc00.0123    DYNAMIC     Gi1/0/48
+  10    aabb.cc00.0124    DYNAMIC     Gi1/0/48
+  10    aabb.cc00.0125    DYNAMIC     Gi1/0/48
+  10    aabb.cc00.0126    DYNAMIC     Gi1/0/48
+  10    aabb.cc00.0127    DYNAMIC     Gi1/0/48
+Total Mac Addresses for this criterion: 42

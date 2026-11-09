@@ -1,0 +1,28 @@
+------------------------------------------------
+Local Intf: Gi1/0/1
+Chassis id: 0011.2233.4455
+Port id: 0011.2233.4455
+Port Description: SW PORT
+System Name: SEP001122334455
+
+System Description: 
+Cisco IP Phone 8841, V1, sip88xx.12-7-1-0001-96
+
+Time remaining: 162 seconds
+System Capabilities: B,T
+Enabled Capabilities: B,T
+Management Addresses:
+    IP: 10.0.10.21
+Auto Negotiation - supported, enabled
+Physical media capabilities:
+    1000baseT(FD)
+    100base-TX(FD)
+    100base-TX(HD)
+    10base-T(FD)
+    10base-T(HD)
+Media Attachment Unit type: 30
+Vlan ID: - not advertised
+
+
+Total entries displayed: 1
+

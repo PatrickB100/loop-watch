@@ -1,0 +1,68 @@
+
+ VLAN0001 is executing the rstp compatible Spanning Tree protocol
+  Bridge Identifier has priority 32768, sysid 1, address 0011.2233.4401
+  Configured hello time 2, max age 20, forward delay 15, transmit hold-count 6
+  Current root has priority 4097, address 0011.2233.0001
+  Root port is 48 (GigabitEthernet1/0/48), cost of root path is 4
+  Topology change flag not set, detected flag not set
+  Number of topology changes 3 last change occurred 2d03h ago
+          from GigabitEthernet1/0/48
+  Times:  hold 1, topology change 35, notification 2
+          hello 2, max age 20, forward delay 15 
+  Timers: hello 0, topology change 0, notification 0, aging 300
+
+ Port 48 (GigabitEthernet1/0/48) of VLAN0001 is root forwarding 
+   Port path cost 4, Port priority 128, Port Identifier 128.48.
+   Designated root has priority 4097, address 0011.2233.0001
+   Designated bridge has priority 4097, address 0011.2233.0001
+   Designated port id is 128.1, designated path cost 0
+   Timers: message age 15, forward delay 0, hold 0
+   Number of transitions to forwarding state: 1
+   Link type is point-to-point by default
+   BPDU: sent 10, received 98765
+
+
+ VLAN0010 is executing the rstp compatible Spanning Tree protocol
+  Bridge Identifier has priority 32768, sysid 10, address 0011.2233.4401
+  Configured hello time 2, max age 20, forward delay 15, transmit hold-count 6
+  Current root has priority 4106, address 0011.2233.0001
+  Root port is 48 (GigabitEthernet1/0/48), cost of root path is 4
+  Topology change flag not set, detected flag not set
+  Number of topology changes 12 last change occurred 00:05:12 ago
+          from GigabitEthernet1/0/14
+  Times:  hold 1, topology change 35, notification 2
+          hello 2, max age 20, forward delay 15 
+  Timers: hello 0, topology change 0, notification 0, aging 300
+
+ Port 1 (GigabitEthernet1/0/1) of VLAN0010 is designated forwarding 
+   Port path cost 4, Port priority 128, Port Identifier 128.1.
+   Designated root has priority 4106, address 0011.2233.0001
+   Designated bridge has priority 32778, address 0011.2233.4401
+   Designated port id is 128.1, designated path cost 4
+   Timers: message age 0, forward delay 0, hold 0
+   Number of transitions to forwarding state: 1
+   The port is in the portfast mode
+   Link type is point-to-point by default
+   BPDU: sent 1234, received 0
+
+ Port 14 (GigabitEthernet1/0/14) of VLAN0010 is designated forwarding 
+   Port path cost 4, Port priority 128, Port Identifier 128.14.
+   Designated root has priority 4106, address 0011.2233.0001
+   Designated bridge has priority 32778, address 0011.2233.4401
+   Designated port id is 128.14, designated path cost 4
+   Timers: message age 0, forward delay 0, hold 0
+   Number of transitions to forwarding state: 3
+   The port is in the portfast mode
+   Link type is point-to-point by default
+   BPDU: sent 5678, received 0
+
+ Port 48 (GigabitEthernet1/0/48) of VLAN0010 is root forwarding 
+   Port path cost 4, Port priority 128, Port Identifier 128.48.
+   Designated root has priority 4106, address 0011.2233.0001
+   Designated bridge has priority 4106, address 0011.2233.0001
+   Designated port id is 128.1, designated path cost 0
+   Timers: message age 15, forward delay 0, hold 0
+   Number of transitions to forwarding state: 1
+   Link type is point-to-point by default
+   BPDU: sent 10, received 98765
+

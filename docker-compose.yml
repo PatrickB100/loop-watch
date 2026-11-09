@@ -1,0 +1,15 @@
+services:
+  loop-watch:
+    build: .
+    image: loop-watch
+    env_file: .env
+    environment:
+      LOOPWATCH_INVENTORY: /app/inventory.yaml
+      LOOPWATCH_DB: /data/loopwatch.sqlite
+    volumes:
+      - ./inventory.yaml:/app/inventory.yaml:ro
+      - loopwatch-data:/data
+    restart: unless-stopped
+
+volumes:
+  loopwatch-data:

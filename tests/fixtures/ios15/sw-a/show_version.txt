@@ -1,0 +1,33 @@
+Cisco IOS Software, C2960X Software (C2960X-UNIVERSALK9-M), Version 15.2(7)E7, RELEASE SOFTWARE (fc2)
+Technical Support: http://www.cisco.com/techsupport
+Copyright (c) 1986-2022 by Cisco Systems, Inc.
+Compiled Wed 19-Oct-22 12:05 by mcpre
+
+ROM: Bootstrap program is C2960X boot loader
+BOOTLDR: C2960X Boot Loader (C2960X-HBOOT-M) Version 15.2(7r)E, RELEASE SOFTWARE (fc1)
+
+sw-a uptime is 12 weeks, 3 days, 4 hours, 15 minutes
+System returned to ROM by power-on
+System image file is "flash:/c2960x-universalk9-mz.152-7.E7/c2960x-universalk9-mz.152-7.E7.bin"
+
+cisco WS-C2960X-48FPD-L (APM86XXX) processor (revision M0) with 524288K bytes of memory.
+Processor board ID FOC0000X000
+Last reset from power-on
+1 Virtual Ethernet interface
+1 FastEthernet interface
+52 Gigabit Ethernet interfaces
+The password-recovery mechanism is enabled.
+
+512K bytes of flash-simulated non-volatile configuration memory.
+Base ethernet MAC Address       : 00:11:22:33:44:00
+Motherboard assembly number     : 73-00000-00
+Power supply part number        : 341-0000-00
+Motherboard serial number       : FOC00000000
+Model number                    : WS-C2960X-48FPD-L
+System serial number            : FOC0000X000
+
+Switch Ports Model                     SW Version            SW Image                 
+------ ----- -----                     ----------            ----------               
+*    1 52    WS-C2960X-48FPD-L         15.2(7)E7             C2960X-UNIVERSALK9-M     
+
+Configuration register is 0xF

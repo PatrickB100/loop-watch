@@ -1,0 +1,23 @@
+-------------------------
+Device ID: sw-core-1.office.local
+Entry address(es): 
+  IP address: 10.0.0.1
+Platform: cisco C9300-48P,  Capabilities: Switch IGMP 
+Interface: TwentyFiveGigE1/1/1,  Port ID (outgoing port): TwentyFiveGigE1/1/2
+Holdtime : 155 sec
+
+Version :
+Cisco IOS Software [Amsterdam], Catalyst L3 Switch Software (CAT9K_IOSXE), Version 17.3.4, RELEASE SOFTWARE (fc1)
+Technical Support: http://www.cisco.com/techsupport
+Copyright (c) 1986-2021 by Cisco Systems, Inc.
+Compiled Sun 04-Jul-21 18:38 by mcpre
+
+advertisement version: 2
+VTP Management Domain: ''
+Native VLAN: 1
+Duplex: full
+Management address(es): 
+  IP address: 10.0.0.1
+
+
+Total cdp entries displayed : 1

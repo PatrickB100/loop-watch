@@ -1,0 +1,15 @@
+Switch is in rapid-pvst mode
+Root bridge for: VLAN0001, VLAN0010
+Extended system ID                      is enabled
+Portfast Default                        is disabled
+Portfast Edge BPDU Guard Default        is enabled
+Portfast Edge BPDU Filter Default       is disabled
+Loopguard Default                       is disabled
+EtherChannel misconfig guard            is enabled
+Configured Pathcost method used is short
+
+Name                   Blocking Listening Learning Forwarding STP Active
+---------------------- -------- --------- -------- ---------- ----------
+VLAN0010                     0         0        0          1          1
+---------------------- -------- --------- -------- ---------- ----------
+1 vlan                       0         0        0          1          1

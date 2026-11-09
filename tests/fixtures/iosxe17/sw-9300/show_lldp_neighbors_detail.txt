@@ -1,0 +1,28 @@
+------------------------------------------------
+Local Intf: Gi1/0/5
+Chassis id: 10.0.10.55
+Port id: 0cd0.f800.0505
+Port Description: SW PORT
+System Name: SEP0CD0F8000505
+
+System Description: 
+Cisco IP Phone 8851, V1, sip88xx.14-1-1-0001-125
+
+Time remaining: 148 seconds
+System Capabilities: B,T
+Enabled Capabilities: B,T
+Management Addresses:
+    IP: 10.0.10.55
+Auto Negotiation - supported, enabled
+Physical media capabilities:
+    1000baseT(FD)
+    100base-TX(FD)
+    100base-TX(HD)
+    10base-T(FD)
+    10base-T(HD)
+Media Attachment Unit type: 30
+Vlan ID: - not advertised
+
+
+Total entries displayed: 1
+

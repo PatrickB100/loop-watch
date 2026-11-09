@@ -1,0 +1,5 @@
+Cisco IOS XE Software, Version 17.03.04
+Cisco IOS Software [Amsterdam], Catalyst L3 Switch Software (CAT9K_IOSXE), Version 17.3.4, RELEASE SOFTWARE (fc1)
+
+sw-core-1 uptime is 20 weeks, 1 day, 2 hours, 3 minutes
+cisco C9300-48P (X86) processor with 1331521K/6147K bytes of memory.
