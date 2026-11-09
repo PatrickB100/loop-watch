@@ -1,8 +1,12 @@
-from collections.abc import Mapping
+import os
+import re
+from collections.abc import Mapping, Sequence, Set
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
+
+from loopwatch.ports import normalize_port
 
 COMMANDS: tuple[str, ...] = (
     "show spanning-tree detail",
@@ -15,9 +19,18 @@ COMMANDS: tuple[str, ...] = (
     "show logging",
 )
 
+# Every LOOPWATCH_<NAME>_USER with a LOOPWATCH_<NAME>_PASSWORD defines the credential set <name>.
+ENV_SET = re.compile(r"^LOOPWATCH_([A-Z0-9]+)_USER$")
 ENV_USER = "LOOPWATCH_SSH_USER"
 ENV_PASSWORD = "LOOPWATCH_SSH_PASSWORD"
 ENV_ENABLE = "LOOPWATCH_SSH_ENABLE"
+DEFAULT_SET = "ssh"
+DEFAULT_DEVICE_TYPE = "cisco_ios"
+DEFAULT_POLL_INTERVAL = 60
+MIN_POLL_INTERVAL = 10
+MAX_POLL_INTERVAL = 3600
+
+_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$")
 
 
 class InventoryError(ValueError):
@@ -38,9 +51,11 @@ class Credentials:
 class Switch:
     name: str
     host: str
-    device_type: str = "cisco_ios"
-    poll_interval: int = 60
+    device_type: str = DEFAULT_DEVICE_TYPE
+    poll_interval: int = DEFAULT_POLL_INTERVAL
     skip: frozenset[str] = frozenset()
+    credentials: str = DEFAULT_SET
+    ap_ports: frozenset[str] = frozenset()  # ports with an access point, normalised names
 
     @property
     def commands(self) -> tuple[str, ...]:
@@ -52,7 +67,8 @@ class Switch:
 @dataclass(frozen=True)
 class Inventory:
     switches: tuple[Switch, ...]
-    credentials: Credentials
+    credential_sets: Mapping[str, Credentials]
+    defaults: Mapping[str, object] = field(default_factory=dict)
 
     def by_name(self, name: str) -> Switch:
         for switch in self.switches:
@@ -64,33 +80,115 @@ class Inventory:
     def names(self) -> frozenset[str]:
         return frozenset(s.name for s in self.switches)
 
+    def credentials_for(self, switch: Switch) -> Credentials:
+        return self.credential_sets[switch.credentials]
+
+    def ap_ports(self) -> frozenset[tuple[str, str]]:
+        return frozenset((s.name, p) for s in self.switches for p in s.ap_ports)
+
+
+def credential_sets_from_env(env: Mapping[str, str]) -> dict[str, Credentials]:
+    sets: dict[str, Credentials] = {}
+    for key, user in env.items():
+        m = ENV_SET.match(key)
+        if not m or not user:
+            continue
+        tag = m.group(1)
+        password = env.get(f"LOOPWATCH_{tag}_PASSWORD")
+        if not password:
+            continue
+        sets[tag.lower()] = Credentials(user, password, env.get(f"LOOPWATCH_{tag}_ENABLE") or None)
+    return sets
+
+
+def validate_device(switch: Switch, credential_sets: Set[str]) -> list[str]:
+    """Human-readable problems with one device; empty when it is fine."""
+    from loopwatch.profiles import profile_for
+
+    msgs: list[str] = []
+    if not _NAME.match(switch.name):
+        msgs.append("Name must be 1-63 characters: letters, digits, dot, dash, underscore")
+    if not switch.host or any(c.isspace() for c in switch.host):
+        msgs.append("Host must not be empty or contain whitespace")
+    try:
+        profile = profile_for(switch.device_type)
+    except InventoryError:
+        profile = None
+        msgs.append(f"Unknown device type {switch.device_type!r}")
+    if not MIN_POLL_INTERVAL <= switch.poll_interval <= MAX_POLL_INTERVAL:
+        msgs.append(f"Poll interval must be between {MIN_POLL_INTERVAL} and {MAX_POLL_INTERVAL} seconds")
+    for command in sorted(switch.skip):
+        if profile is None:
+            msgs.append(f"{command!r} cannot be checked against an unknown device type")
+        elif command not in profile.commands:
+            msgs.append(f"{command!r} is not a command of this device type")
+    if switch.credentials not in credential_sets:
+        tag = switch.credentials.upper()
+        msgs.append(f"Credential set {switch.credentials!r} is not defined (LOOPWATCH_{tag}_USER / LOOPWATCH_{tag}_PASSWORD)")
+    return msgs
+
+
+def _entry(entry: Mapping[str, object], defaults: Mapping[str, object]) -> Switch:
+    name = entry.get("name")
+    host = entry.get("host")
+    if not name or not host:
+        raise InventoryError(f"switch entry needs name and host: {dict(entry)!r}")
+    return Switch(
+        name=str(name),
+        host=str(host),
+        device_type=str(entry.get("device_type", defaults.get("device_type", DEFAULT_DEVICE_TYPE))),
+        poll_interval=int(entry.get("poll_interval", defaults.get("poll_interval", DEFAULT_POLL_INTERVAL))),  # type: ignore[call-overload]
+        skip=frozenset(str(c) for c in (entry.get("skip") or ())),  # type: ignore[union-attr]
+        credentials=str(entry.get("credentials", defaults.get("credentials", DEFAULT_SET))),
+        ap_ports=frozenset(normalize_port(str(p)) for p in (entry.get("ap_ports") or ())),  # type: ignore[union-attr]
+    )
+
 
 def load_inventory(path: Path, env: Mapping[str, str]) -> Inventory:
-    user = env.get(ENV_USER)
-    password = env.get(ENV_PASSWORD)
-    if not user or not password:
-        raise InventoryError(f"{ENV_USER} and {ENV_PASSWORD} must be set")
-    credentials = Credentials(user, password, env.get(ENV_ENABLE) or None)
-
-    data = yaml.safe_load(Path(path).read_text()) or {}
-    defaults = data.get("defaults") or {}
+    """Read the device list; a missing file is an empty inventory. Credentials come from `env` only."""
+    sets = credential_sets_from_env(env)
+    path = Path(path)
+    if not path.exists():
+        return Inventory((), sets, {})
+    data = yaml.safe_load(path.read_text()) or {}
+    defaults: Mapping[str, object] = data.get("defaults") or {}
     switches: list[Switch] = []
     seen: set[str] = set()
-    for entry in data.get("switches") or []:
-        name = entry.get("name")
-        host = entry.get("host")
-        if not name or not host:
-            raise InventoryError(f"switch entry needs name and host: {entry!r}")
-        if name in seen:
-            raise InventoryError(f"duplicate switch name: {name}")
-        seen.add(name)
-        switches.append(
-            Switch(
-                name=str(name),
-                host=str(host),
-                device_type=str(entry.get("device_type", defaults.get("device_type", "cisco_ios"))),
-                poll_interval=int(entry.get("poll_interval", defaults.get("poll_interval", 60))),
-                skip=frozenset(entry.get("skip") or []),
-            )
-        )
-    return Inventory(tuple(switches), credentials)
+    for raw in data.get("switches") or []:
+        switch = _entry(raw, defaults)
+        if switch.name in seen:
+            raise InventoryError(f"duplicate switch name: {switch.name}")
+        seen.add(switch.name)
+        problems = validate_device(switch, sets.keys())
+        if problems:
+            raise InventoryError(f"device {switch.name!r}: " + "; ".join(problems))
+        switches.append(switch)
+    return Inventory(tuple(switches), sets, defaults)
+
+
+def save_inventory(path: Path, switches: Sequence[Switch], defaults: Mapping[str, object]) -> None:
+    """Write the device list atomically (temp file + rename in the same directory). Never credentials."""
+    path = Path(path)
+    default_type = defaults.get("device_type", DEFAULT_DEVICE_TYPE)
+    default_interval = defaults.get("poll_interval", DEFAULT_POLL_INTERVAL)
+    default_set = defaults.get("credentials", DEFAULT_SET)
+    entries: list[dict[str, object]] = []
+    for s in switches:
+        entry: dict[str, object] = {"name": s.name, "host": s.host}
+        if s.device_type != default_type:
+            entry["device_type"] = s.device_type
+        if s.credentials != default_set:
+            entry["credentials"] = s.credentials
+        if s.poll_interval != default_interval:
+            entry["poll_interval"] = s.poll_interval
+        if s.skip:
+            entry["skip"] = sorted(s.skip)
+        if s.ap_ports:
+            entry["ap_ports"] = sorted(s.ap_ports)
+        entries.append(entry)
+    data: dict[str, object] = {"switches": entries}
+    if defaults:
+        data["defaults"] = dict(defaults)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(yaml.safe_dump(data, sort_keys=False, default_flow_style=False))
+    os.replace(tmp, path)

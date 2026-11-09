@@ -111,7 +111,7 @@ def report(ctx: click.Context, since_text: str | None, from_text: str | None, to
 def _managed_names(inventory_path: Path, store: Store) -> frozenset[str]:
     """Managed switch names from the inventory when it is readable, else whatever the database knows."""
     try:
-        return load_inventory(inventory_path, {"LOOPWATCH_SSH_USER": "x", "LOOPWATCH_SSH_PASSWORD": "x"}).names
+        return load_inventory(inventory_path, os.environ).names
     except (FileNotFoundError, InventoryError):
         return frozenset(store.switches())
 
@@ -156,7 +156,7 @@ def check_inventory(ctx: click.Context, transport_fixtures: Path | None) -> None
     for sw in inv.switches:
         profile = profile_for(sw.device_type)
         try:
-            out = transport.run(sw, inv.credentials, [profile.version_command])
+            out = transport.run(sw, inv.credentials_for(sw), [profile.version_command])
         except TransportError as exc:
             failed += 1
             click.echo(f"{sw.name:<24} FAIL {exc.message}")

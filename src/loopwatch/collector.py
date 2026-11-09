@@ -60,7 +60,7 @@ def poll_once(
     if prev is None:
         prev = store.latest_snapshot(switch.name)
     try:
-        raw = transport.run(switch, inv.credentials, switch.commands)
+        raw = transport.run(switch, inv.credentials_for(switch), switch.commands)
     except TransportError as exc:
         store.record_poll(switch.name, switch.host, now, now, None, exc.message)
         others_down = any(
