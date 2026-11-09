@@ -34,3 +34,10 @@ def ios15_raw(ios15_root) -> dict[str, str]:
     from loopwatch.transport import command_slug
 
     return {c: (ios15_root / "sw-a" / f"{command_slug(c)}.txt").read_text() for c in COMMANDS}
+
+
+@pytest.fixture
+def snap_a(ios15_raw):
+    from loopwatch.parsers.snapshot import parse_snapshot
+
+    return parse_snapshot("sw-a", ios15_raw, NOW)
