@@ -1,0 +1,10 @@
+# Copy to inventory.yaml and fill in your switches. Credentials come from .env, never from here.
+switches:
+  - name: sw-core-1
+    host: 10.0.0.1
+  - name: sw-floor2-a
+    host: 10.0.0.12
+    # skip: [show mac address-table dynamic]   # drop a command that is too slow on one switch
+defaults:
+  device_type: cisco_ios
+  poll_interval: 60

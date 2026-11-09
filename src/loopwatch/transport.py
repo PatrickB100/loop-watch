@@ -73,3 +73,20 @@ class NetmikoTransport:
         except Exception as exc:  # netmiko raises many exception types; all become TransportError
             raise self._wrap(switch.name, exc, credentials.password) from None
         return out
+
+
+class RecordingTransport:
+    """Wraps another transport and writes every command's raw output to root/<switch>/<slug>.txt,
+    the layout FakeTransport reads, so real switch output can become test fixtures."""
+
+    def __init__(self, inner: Transport, root: Path) -> None:
+        self.inner = inner
+        self.root = Path(root)
+
+    def run(self, switch: Switch, credentials: Credentials, commands: Sequence[str]) -> dict[str, str]:
+        out = self.inner.run(switch, credentials, commands)
+        folder = self.root / switch.name
+        folder.mkdir(parents=True, exist_ok=True)
+        for command, text in out.items():
+            (folder / f"{command_slug(command)}.txt").write_text(text)
+        return out
