@@ -1,0 +1,13 @@
+{% extends "base.html.j2" %}
+{% set nav = "report" %}
+{% block title %}loop-watch report{% endblock %}
+{% block content %}
+<form class="card window" method="get" action="/report">
+<span class="links"><a href="/report?since=15m">15 min</a><a href="/report?since=2h">2 h</a>
+<a href="/report?since=24h">24 h</a><a href="/report?since=7d">7 d</a></span>
+<span class="right muted">from</span><input type="datetime-local" name="from" value="{{ since | local_input }}">
+<span class="muted">to</span><input type="datetime-local" name="to" value="{{ until | local_input }}">
+<button class="btn">Show</button>
+</form>
+{% include "report_body.html.j2" %}
+{% endblock %}

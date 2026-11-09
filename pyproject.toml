@@ -14,10 +14,11 @@ dependencies = [
     "click",
     "Jinja2",
     "netaddr",
+    "aiohttp",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest", "pytest-asyncio"]
+dev = ["pytest", "pytest-asyncio", "pytest-aiohttp"]
 
 [project.scripts]
 loop-watch = "loopwatch.cli:main"
@@ -26,7 +27,7 @@ loop-watch = "loopwatch.cli:main"
 packages = ["src/loopwatch"]
 
 [tool.hatch.build]
-include = ["src/loopwatch/**/*.py", "src/loopwatch/report/templates/*.j2"]
+include = ["src/loopwatch/**/*.py", "src/loopwatch/report/templates/*.j2", "src/loopwatch/web/templates/*.j2", "src/loopwatch/web/static/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
