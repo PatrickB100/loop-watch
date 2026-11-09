@@ -47,8 +47,11 @@ class NetmikoTransport:
         self.command_timeout = command_timeout
 
     @staticmethod
-    def _wrap(switch_name: str, exc: BaseException, password: str) -> TransportError:
-        text = str(exc).replace(password, "***") if password else str(exc)
+    def _wrap(switch_name: str, exc: BaseException, *secrets: str | None) -> TransportError:
+        text = str(exc)
+        for secret in secrets:
+            if secret:
+                text = text.replace(secret, "***")
         return TransportError(switch_name, f"{type(exc).__name__}: {text}")
 
     def run(self, switch: Switch, credentials: Credentials, commands: Sequence[str]) -> dict[str, str]:
@@ -71,7 +74,7 @@ class NetmikoTransport:
                 for command in commands:
                     out[command] = conn.send_command(command, read_timeout=self.command_timeout)
         except Exception as exc:  # netmiko raises many exception types; all become TransportError
-            raise self._wrap(switch.name, exc, credentials.password) from None
+            raise self._wrap(switch.name, exc, credentials.password, credentials.enable) from None
         return out
 
 

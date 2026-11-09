@@ -4,7 +4,7 @@ from collections.abc import Iterable
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from loopwatch.model import Event, Neighbor, Snapshot, StpVlan
+from loopwatch.model import Event, Interface, LogLine, MacEntry, Neighbor, Snapshot, StpPort, StpVlan
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS switches (
@@ -23,22 +23,23 @@ CREATE INDEX IF NOT EXISTS mac_entries_poll_mac ON mac_entries(poll_id, mac);
 CREATE TABLE IF NOT EXISTS neighbors (
     poll_id INTEGER NOT NULL REFERENCES polls(id) ON DELETE CASCADE, port TEXT, neighbor_name TEXT,
     neighbor_port TEXT, platform TEXT, capabilities TEXT);
+CREATE INDEX IF NOT EXISTS neighbors_poll ON neighbors(poll_id);
 CREATE TABLE IF NOT EXISTS stp_vlans (
     poll_id INTEGER NOT NULL REFERENCES polls(id) ON DELETE CASCADE, vlan INTEGER, root_id TEXT,
     tc_count INTEGER, tc_last_port TEXT, tc_last_age INTEGER);
+CREATE INDEX IF NOT EXISTS stp_vlans_poll ON stp_vlans(poll_id);
 CREATE TABLE IF NOT EXISTS stp_ports (
     poll_id INTEGER NOT NULL REFERENCES polls(id) ON DELETE CASCADE, vlan INTEGER, port TEXT, role TEXT,
     state TEXT, port_type TEXT, bpdu_sent INTEGER, bpdu_received INTEGER);
+CREATE INDEX IF NOT EXISTS stp_ports_poll ON stp_ports(poll_id);
 CREATE TABLE IF NOT EXISTS log_lines (
     poll_id INTEGER NOT NULL REFERENCES polls(id) ON DELETE CASCADE, time TEXT, mnemonic TEXT, text TEXT);
+CREATE INDEX IF NOT EXISTS log_lines_poll ON log_lines(poll_id);
 CREATE TABLE IF NOT EXISTS events (
     id INTEGER PRIMARY KEY, time TEXT NOT NULL, switch_id INTEGER NOT NULL REFERENCES switches(id),
     kind TEXT NOT NULL, severity TEXT NOT NULL, port TEXT, vlan INTEGER, mac TEXT, reason TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS events_time ON events(time);
 """
-
-_SNAPSHOT_TABLES = ("interfaces", "mac_entries", "neighbors", "stp_vlans", "stp_ports", "log_lines")
-
 
 def _iso(dt: datetime | None) -> str | None:
     return dt.isoformat() if dt else None
@@ -109,7 +110,10 @@ class Store:
         finished_at: datetime,
         snapshot: Snapshot | None,
         error: str | None,
+        new_log_lines: Iterable[LogLine] | None = None,
     ) -> int:
+        """Store one poll. `new_log_lines` limits the stored log lines to those not seen in an
+        earlier poll (the snapshot itself always carries the whole buffer); None stores them all."""
         switch_id = self._switch_id(switch, host, finished_at if snapshot else None)
         with self.conn:
             cur = self.conn.execute(
@@ -118,10 +122,11 @@ class Store:
             )
             poll_id = int(cur.lastrowid or 0)
             if snapshot is not None:
-                self._write_snapshot(poll_id, snapshot)
+                lines = snapshot.log_lines if new_log_lines is None else tuple(new_log_lines)
+                self._write_snapshot(poll_id, snapshot, lines)
         return poll_id
 
-    def _write_snapshot(self, poll_id: int, s: Snapshot) -> None:
+    def _write_snapshot(self, poll_id: int, s: Snapshot, log_lines: tuple[LogLine, ...]) -> None:
         c = self.conn
         c.executemany(
             "INSERT INTO interfaces VALUES (?,?,?,?,?,?,?,?,?,?,?)",
@@ -143,7 +148,7 @@ class Store:
         )
         c.executemany(
             "INSERT INTO log_lines VALUES (?,?,?,?)",
-            [(poll_id, _iso(line.time), line.mnemonic, line.text) for line in s.log_lines],
+            [(poll_id, _iso(line.time), line.mnemonic, line.text) for line in log_lines],
         )
 
     @_locked
@@ -217,6 +222,43 @@ class Store:
         )
         return [Neighbor(r[0], r[1], r[2], r[3], frozenset(r[4].split())) for r in rows]
 
+    @_locked
+    def latest_snapshot(self, switch: str) -> Snapshot | None:
+        """The newest successful poll as a Snapshot (without the STP summary, which is not stored).
+        Its log_lines are every line stored for the switch, so they can serve as the seen-set
+        after a restart."""
+        row = self.conn.execute(
+            "SELECT p.id, p.finished_at FROM polls p JOIN switches s ON s.id = p.switch_id "
+            "WHERE s.name = ? AND p.ok = 1 ORDER BY p.finished_at DESC, p.id DESC LIMIT 1",
+            (switch,),
+        ).fetchone()
+        if row is None:
+            return None
+        poll_id, finished_at = int(row[0]), _dt(row[1])
+        c = self.conn
+        interfaces = tuple(
+            Interface(*r) for r in c.execute(
+                "SELECT name, link, vlan, speed, in_pkts, out_pkts, broadcast, multicast, in_errors, out_errors "
+                "FROM interfaces WHERE poll_id = ?", (poll_id,))
+        )
+        macs = tuple(MacEntry(*r) for r in c.execute("SELECT vlan, mac, port FROM mac_entries WHERE poll_id = ?", (poll_id,)))
+        neighbors = tuple(
+            Neighbor(r[0], r[1], r[2], r[3], frozenset(r[4].split())) for r in c.execute(
+                "SELECT port, neighbor_name, neighbor_port, platform, capabilities FROM neighbors WHERE poll_id = ?",
+                (poll_id,))
+        )
+        stp_vlans = tuple(StpVlan(*r) for r in c.execute(
+            "SELECT vlan, root_id, tc_count, tc_last_port, tc_last_age FROM stp_vlans WHERE poll_id = ?", (poll_id,)))
+        stp_ports = tuple(StpPort(*r) for r in c.execute(
+            "SELECT vlan, port, role, state, port_type, bpdu_sent, bpdu_received FROM stp_ports WHERE poll_id = ?",
+            (poll_id,)))
+        log_lines = tuple(
+            LogLine(_dt(r[0]) if r[0] else None, r[1], r[2]) for r in c.execute(
+                "SELECT l.time, l.mnemonic, l.text FROM log_lines l JOIN polls p ON p.id = l.poll_id "
+                "JOIN switches s ON s.id = p.switch_id WHERE s.name = ?", (switch,))
+        )
+        return Snapshot(switch, finished_at, stp_vlans, stp_ports, None, interfaces, macs, neighbors, log_lines, ())
+
     # --- maintenance ------------------------------------------------------
 
     @_locked
@@ -224,8 +266,6 @@ class Store:
         snapshot_cutoff = _iso(now - timedelta(days=snapshot_days))
         event_cutoff = _iso(now - timedelta(days=event_days))
         with self.conn:
-            old_polls = [r[0] for r in self.conn.execute("SELECT id FROM polls WHERE finished_at < ?", (snapshot_cutoff,))]
-            for table in _SNAPSHOT_TABLES:
-                self.conn.executemany(f"DELETE FROM {table} WHERE poll_id = ?", [(p,) for p in old_polls])
+            # Child rows go with ON DELETE CASCADE; each child table has a poll_id index for it.
             self.conn.execute("DELETE FROM polls WHERE finished_at < ?", (snapshot_cutoff,))
             self.conn.execute("DELETE FROM events WHERE time < ?", (event_cutoff,))

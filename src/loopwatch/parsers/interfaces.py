@@ -7,7 +7,8 @@ from loopwatch.ports import normalize_port
 _HEADER = re.compile(
     r"^(\S+) is (up|down|administratively down), line protocol is (up|down)(?: \((\S+)\))?", re.M
 )
-_PHYSICAL = re.compile(r"^(Gi|Te|Twe|Fo|Hu|Fa|Po)\d")
+# Front-panel and port-channel interfaces. AppGigabitEthernet (Ap) is the internal app-hosting port.
+_PHYSICAL = re.compile(r"^(Gi|Te|Tw|Twe|Fo|Hu|Fa|Po)\d")
 _IN_PKTS = re.compile(r"(\d+) packets input")
 _OUT_PKTS = re.compile(r"(\d+) packets output")
 _BCAST = re.compile(r"Received (\d+) broadcasts \((\d+) (?:IP )?multicasts?\)")

@@ -1,7 +1,7 @@
 import re
 from datetime import timedelta
 
-from loopwatch.detectors.context import DetectorContext, new_log_lines
+from loopwatch.detectors.context import DetectorContext, log_reason, new_log_lines
 from loopwatch.model import Event
 from loopwatch.ports import normalize_port
 
@@ -61,6 +61,6 @@ def detect(ctx: DetectorContext) -> list[Event]:
         if line.mnemonic != "PM-4-ERR_DISABLE":
             continue
         m = _ERR_DISABLE_IFACE.search(line.text) or _ERR_DISABLE_ON.search(line.text)
-        events.append(Event(line.time or now, ctx.cur.switch, "err_disable", "high", line.text,
+        events.append(Event(now, ctx.cur.switch, "err_disable", "high", log_reason(line),
                             port=normalize_port(m.group(1)) if m else None))
     return events

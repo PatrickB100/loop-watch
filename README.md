@@ -61,7 +61,14 @@ docker compose exec loop-watch loop-watch report --since 1h
 - **Topology change chain** follows "last topology change from port X" from
   switch to switch through CDP. The last hop points at the edge where it
   entered.
-- **Timeline** lists every event in the window.
+- **Timeline** lists every event in the window. Events found in a switch's
+  log buffer are stamped with the poll time; the switch's own timestamp is
+  the first field of the reason. Switch clocks are read as written, so a
+  switch logging in CET shows CET there.
+
+Set switch clocks to UTC where you can (`clock timezone UTC 0`), and keep
+`service timestamps log datetime msec` on. Switches that stamp logs with
+uptime still work, but their log lines carry no time.
 
 ## Recording real switch output
 

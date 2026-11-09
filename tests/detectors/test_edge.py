@@ -54,3 +54,11 @@ def test_bpdu_increase_on_network_port_is_normal():
     prev = make_snapshot(stp_ports=(make_stp_port(10, "Gi1/0/48", port_type="network", bpdu_received=10),))
     cur = make_snapshot(stp_ports=(make_stp_port(10, "Gi1/0/48", port_type="network", bpdu_received=40),))
     assert edge.detect(ctx(prev, cur)) == []
+
+
+def test_bpdu_increase_on_port_that_was_edge_before():
+    # IOS may drop operational portfast the moment a BPDU arrives; the previous snapshot proves it was an edge port.
+    prev = make_snapshot(stp_ports=(make_stp_port(10, "Gi1/0/14", port_type="edge", bpdu_received=0),))
+    cur = make_snapshot(stp_ports=(make_stp_port(10, "Gi1/0/14", port_type="network", bpdu_received=3),))
+    (ev,) = edge.detect(ctx(prev, cur))
+    assert ev.kind == "unexpected_neighbor" and ev.port == "Gi1/0/14"

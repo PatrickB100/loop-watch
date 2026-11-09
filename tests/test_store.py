@@ -97,3 +97,38 @@ def test_store_usable_from_worker_thread(store, snap_a):
         futures = [pool.submit(store.record_poll, "sw-a", "h", NOW, NOW, snap_a, None) for _ in range(4)]
         assert sorted(f.result() for f in futures) == [1, 2, 3, 4]
     assert len(store.counter_history("sw-a", NOW - timedelta(hours=1))["Gi1/0/14"]) == 4
+
+
+def test_prune_uses_indexes_on_every_child_table(store):
+    for table in ("interfaces", "mac_entries", "neighbors", "stp_vlans", "stp_ports", "log_lines"):
+        plan = " ".join(row[3] for row in store.conn.execute(f"EXPLAIN QUERY PLAN DELETE FROM {table} WHERE poll_id = ?", (1,)))
+        assert "SCAN" not in plan, f"{table}: {plan}"
+
+
+def test_prune_removes_child_rows(store, snap_a):
+    old = NOW - timedelta(days=15)
+    store.record_poll("sw-a", "h", old, old, snap_a, None)
+    store.prune(NOW)
+    for table in ("polls", "interfaces", "mac_entries", "neighbors", "stp_vlans", "stp_ports", "log_lines"):
+        assert store.conn.execute(f"SELECT count(*) FROM {table}").fetchone()[0] == 0, table
+
+
+def test_latest_snapshot_roundtrip(store, snap_a):
+    assert store.latest_snapshot("sw-a") is None
+    store.record_poll("sw-a", "h", NOW, NOW, snap_a, None)
+    store.record_poll("sw-a", "h", NOW + timedelta(minutes=1), NOW + timedelta(minutes=1), None, "timeout")
+    got = store.latest_snapshot("sw-a")
+    assert got is not None and got.taken_at == NOW and got.switch == "sw-a"
+    assert set(got.interfaces) == set(snap_a.interfaces) and set(got.macs) == set(snap_a.macs)
+    assert set(got.neighbors) == set(snap_a.neighbors) and set(got.stp_vlans) == set(snap_a.stp_vlans)
+    assert set(got.stp_ports) == set(snap_a.stp_ports) and set(got.log_lines) == set(snap_a.log_lines)
+    assert got.stp_summary is None and got.parse_errors == ()
+
+
+def test_record_poll_stores_only_new_log_lines_and_latest_snapshot_unions_them(store, snap_a):
+    first, second = snap_a.log_lines[:2], snap_a.log_lines[2:]
+    store.record_poll("sw-a", "h", NOW, NOW, snap_a, None, new_log_lines=first)
+    store.record_poll("sw-a", "h", NOW + timedelta(minutes=1), NOW + timedelta(minutes=1), snap_a, None, new_log_lines=second)
+    assert store.conn.execute("SELECT count(*) FROM log_lines").fetchone()[0] == len(snap_a.log_lines)
+    got = store.latest_snapshot("sw-a")
+    assert got is not None and set(got.log_lines) == set(snap_a.log_lines)

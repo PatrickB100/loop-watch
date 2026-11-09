@@ -33,10 +33,16 @@ def test_poll_once_first_poll_stores_snapshot_and_events(store, inv, fake):
     snap, events = poll_once(inv.by_name("sw-a"), inv, fake, store, None, NOW)
     # no prev: the bridge on edge port Gi1/0/14 fires, and the MACFLAP line in the log buffer counts as new
     assert snap is not None and {e.kind for e in events} == {"unexpected_neighbor", "mac_flap"}
-    # the mac_flap event carries the log line's own timestamp (09:42), hence the wide window
-    assert len(store.events(NOW - timedelta(hours=1), NOW + timedelta(minutes=1))) == 2
+    assert len(store.events(NOW - timedelta(minutes=1), NOW + timedelta(minutes=1))) == 2
     assert store.switches() == ["sw-a"]
     assert fake.calls == [("sw-a", inv.by_name("sw-a").commands)]
+
+
+def test_poll_once_without_prev_uses_the_stored_snapshot(store, inv, fake):
+    # A restart, or `snapshot` while `watch` runs, must not re-report the whole log buffer and every known bridge.
+    poll_once(inv.by_name("sw-a"), inv, fake, store, None, NOW)
+    snap, events = poll_once(inv.by_name("sw-a"), inv, fake, store, None, NOW + timedelta(seconds=60))
+    assert snap is not None and events == []
 
 
 def test_poll_once_second_poll_is_quiet(store, inv, fake):

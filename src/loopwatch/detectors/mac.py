@@ -1,6 +1,6 @@
 import re
 
-from loopwatch.detectors.context import DetectorContext, new_log_lines
+from loopwatch.detectors.context import DetectorContext, log_reason, new_log_lines
 from loopwatch.model import Event
 from loopwatch.ports import normalize_mac, normalize_port
 
@@ -34,11 +34,11 @@ def detect(ctx: DetectorContext) -> list[Event]:
         m = _MACFLAP.search(line.text)
         events.append(
             Event(
-                time=line.time or now,
+                time=now,
                 switch=ctx.cur.switch,
                 kind="mac_flap",
                 severity="high",
-                reason=line.text,
+                reason=log_reason(line),
                 port=normalize_port(m.group(3)) if m else None,
                 vlan=int(m.group(2)) if m else None,
                 mac=normalize_mac(m.group(1)) if m else None,

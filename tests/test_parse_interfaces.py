@@ -33,3 +33,14 @@ def test_parse_interfaces_status_wins_over_line_protocol(ios15_raw):
     status = {"Gi1/0/14": ("err-disabled", "10", "auto")}
     ifs = {i.port: i for i in parse_interfaces(ios15_raw["show interfaces"], status)}
     assert ifs["Gi1/0/14"].link == "err-disabled"
+
+
+def test_parse_interfaces_mgig_is_physical_and_appgig_is_not():
+    text = ("TwoGigabitEthernet1/0/1 is up, line protocol is up (connected) \n"
+            "     10 packets input, 100 bytes, 0 no buffer\n     Received 5 broadcasts (1 multicasts)\n"
+            "     0 input errors, 0 CRC, 0 frame, 0 overrun, 0 ignored\n"
+            "     20 packets output, 200 bytes, 0 underruns\n     0 output errors, 0 collisions, 0 interface resets\n"
+            "AppGigabitEthernet1/0/1 is up, line protocol is up (connected) \n"
+            "     0 packets input, 0 bytes, 0 no buffer\n     Received 0 broadcasts (0 multicasts)\n")
+    ifs = {i.port: i for i in parse_interfaces(text, {})}
+    assert set(ifs) == {"Tw1/0/1"} and ifs["Tw1/0/1"].in_bcast == 5

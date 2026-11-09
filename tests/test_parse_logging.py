@@ -1,5 +1,7 @@
 from datetime import datetime, timezone
 
+import pytest
+
 from loopwatch.model import LogLine
 from loopwatch.parsers.logging import is_relevant, parse_logging
 
@@ -41,3 +43,21 @@ def test_is_relevant():
     assert is_relevant(LogLine(None, "STORM_CONTROL-3-SHUTDOWN", ""))
     assert not is_relevant(LogLine(None, "SYS-5-CONFIG_I", ""))
     assert not is_relevant(LogLine(None, None, "garbage"))
+
+
+@pytest.mark.parametrize(
+    "raw,expected_time",
+    [
+        ("000124: Nov  9 2026 09:41:58.102 CET: %LINK-3-UPDOWN: Interface Gi1/0/1, changed state to up",
+         datetime(2026, 11, 9, 9, 41, 58, 102000, tzinfo=timezone.utc)),
+        ("*Nov  9 2026 09:41:58: %LINK-3-UPDOWN: Interface Gi1/0/1, changed state to up",
+         datetime(2026, 11, 9, 9, 41, 58, tzinfo=timezone.utc)),
+        ("1w2d: %LINK-3-UPDOWN: Interface Gi1/0/1, changed state to up", None),
+        ("00:12:33: %LINK-3-UPDOWN: Interface Gi1/0/1, changed state to up", None),
+        ("000125: %LINK-3-UPDOWN: Interface Gi1/0/1, changed state to up", None),
+    ],
+)
+def test_parse_logging_keeps_lines_with_other_timestamp_styles(raw, expected_time):
+    (line,) = parse_logging(raw, NOW)
+    assert line.mnemonic == "LINK-3-UPDOWN" and line.time == expected_time
+    assert line.text.startswith("%LINK-3-UPDOWN")

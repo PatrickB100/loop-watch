@@ -54,4 +54,4 @@ def test_err_disable_from_log():
     cur = make_snapshot(log_lines=(line,))
     (ev,) = links.detect(ctx(None, cur))
     assert (ev.kind, ev.port, ev.severity) == ("err_disable", "Gi1/0/7", "high")
-    assert ev.reason == line.text
+    assert line.text in ev.reason and ev.time == cur.taken_at

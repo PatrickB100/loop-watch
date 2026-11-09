@@ -13,6 +13,11 @@ class DetectorContext:
     uplink_ports: frozenset[str]  # ports that face another managed switch
 
 
+def log_reason(line: LogLine) -> str:
+    """The log text prefixed with the switch's own timestamp, which is read as written (zone unresolved)."""
+    return f"{line.time:%H:%M:%S} {line.text}" if line.time else line.text
+
+
 def new_log_lines(ctx: DetectorContext) -> tuple[LogLine, ...]:
     """Log lines in `cur` that were not in `prev`; all of them on the first poll."""
     if ctx.prev is None:

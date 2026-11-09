@@ -1,6 +1,7 @@
 from loopwatch.detectors import mac
 from loopwatch.detectors.context import DetectorContext, new_log_lines
 from loopwatch.model import MacEntry
+from tests.conftest import NOW
 from tests.detectors.builders import make_log, make_snapshot
 
 
@@ -35,7 +36,7 @@ def test_macflap_log_line_emits_event_once():
     cur = make_snapshot(log_lines=(line,))
     (ev,) = mac.detect(ctx(make_snapshot(), cur))
     assert (ev.kind, ev.mac, ev.vlan, ev.port, ev.severity) == ("mac_flap", "aabb.cc00.0002", 10, "Gi1/0/14", "high")
-    assert ev.reason == line.text
+    assert line.text in ev.reason and ev.time == cur.taken_at
     assert mac.detect(ctx(cur, cur)) == []
 
 
@@ -44,6 +45,17 @@ def test_macflap_log_line_with_long_port_names():
     cur = make_snapshot(log_lines=(make_log("SW_MATM-4-MACFLAP_NOTIF", text),))
     (ev,) = mac.detect(ctx(None, cur))
     assert (ev.mac, ev.vlan, ev.port) == ("0011.2233.4455", 20, "Gi1/0/3")
+
+
+def test_log_event_stamped_ahead_of_poll_uses_poll_time():
+    # Switch clocks are read as written (CET read as UTC lands in the future); the event must still
+    # fall inside a report window that ends at the poll time.
+    from datetime import timedelta
+
+    line = make_log("SW_MATM-4-MACFLAP_NOTIF", FLAP_TEXT, time=NOW + timedelta(hours=1))
+    cur = make_snapshot(taken_at=NOW, log_lines=(line,))
+    (ev,) = mac.detect(ctx(None, cur))
+    assert ev.time == NOW and "11:00:00" in ev.reason
 
 
 def test_new_log_lines_without_prev_returns_all():

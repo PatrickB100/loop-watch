@@ -1,8 +1,8 @@
 """Parse the `show logging` buffer.
 
 Timezone names in IOS timestamps (CET, UTC, ...) are not resolved: the time is
-read as written and tagged UTC. Set switch clocks to UTC, or allow for the
-offset when reading a report.
+read as written and tagged UTC. Events therefore never use LogLine.time as their
+own time; they carry it in their reason text. Set switch clocks to UTC where you can.
 """
 
 import re
@@ -10,11 +10,11 @@ from datetime import datetime, timedelta, timezone
 
 from loopwatch.model import LogLine
 
-_LINE = re.compile(
-    r"^(?:\d+: )?"  # sequence number
-    r"(?:[*.])?"  # clock-not-authoritative / NTP-synced markers
-    r"(?:(?P<mon>[A-Z][a-z]{2})\s+(?P<day>\d{1,2}) (?P<hms>\d\d:\d\d:\d\d)(?:\.(?P<ms>\d+))?(?: [A-Za-z]+)?: )?"
-    r"(?P<text>%(?P<mnemonic>[A-Z0-9_]+-\d-[A-Z0-9_]+): .*)$"
+# Anything before the %MNEMONIC is a prefix we try to read as a timestamp; the line is kept either way.
+_LINE = re.compile(r"^(?P<prefix>.*?)(?P<text>%(?P<mnemonic>[A-Z0-9_]+-\d-[A-Z0-9_]+): .*)$")
+# "Nov  9 09:41:58.102 CET", "Nov  9 2026 09:41:58", with optional sequence number and */. markers.
+_STAMP = re.compile(
+    r"(?<![A-Za-z])(?P<mon>[A-Z][a-z]{2})\s+(?P<day>\d{1,2})(?: (?P<year>\d{4}))? (?P<hms>\d\d:\d\d:\d\d)(?:\.(?P<ms>\d+))?"
 )
 
 RELEVANT_MNEMONICS: tuple[str, ...] = (
@@ -28,15 +28,19 @@ RELEVANT_MNEMONICS: tuple[str, ...] = (
 )
 
 
-def _parse_time(mon: str, day: str, hms: str, ms: str | None, now: datetime) -> datetime | None:
+def _parse_time(prefix: str, now: datetime) -> datetime | None:
+    m = _STAMP.search(prefix)
+    if not m:
+        return None  # uptime stamps (1w2d, 00:12:33) or no timestamp at all
+    year = m.group("year") or str(now.year)
     try:
-        stamp = datetime.strptime(f"{now.year} {mon} {day} {hms}", "%Y %b %d %H:%M:%S")
+        stamp = datetime.strptime(f"{year} {m.group('mon')} {m.group('day')} {m.group('hms')}", "%Y %b %d %H:%M:%S")
     except ValueError:
         return None
-    if ms:
-        stamp = stamp.replace(microsecond=int(ms.ljust(6, "0")[:6]))
+    if m.group("ms"):
+        stamp = stamp.replace(microsecond=int(m.group("ms").ljust(6, "0")[:6]))
     stamp = stamp.replace(tzinfo=timezone.utc)
-    if stamp > now + timedelta(days=1):  # a December line read in January
+    if not m.group("year") and stamp > now + timedelta(days=1):  # a December line read in January
         stamp = stamp.replace(year=now.year - 1)
     return stamp
 
@@ -47,10 +51,7 @@ def parse_logging(text: str, now: datetime) -> tuple[LogLine, ...]:
         m = _LINE.match(raw.strip())
         if not m:
             continue
-        time = None
-        if m.group("mon"):
-            time = _parse_time(m.group("mon"), m.group("day"), m.group("hms"), m.group("ms"), now)
-        lines.append(LogLine(time, m.group("mnemonic"), m.group("text")))
+        lines.append(LogLine(_parse_time(m.group("prefix"), now), m.group("mnemonic"), m.group("text")))
     return tuple(lines)
 
 

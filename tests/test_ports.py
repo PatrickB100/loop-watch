@@ -17,6 +17,10 @@ from loopwatch.ports import normalize_mac, normalize_port
         ("Po1", "Po1"),
         ("Vlan10", "Vl10"),
         (" GigabitEthernet1/0/14 ", "Gi1/0/14"),
+        ("TwoGigabitEthernet1/0/1", "Tw1/0/1"),
+        ("Tw1/0/1", "Tw1/0/1"),
+        ("AppGigabitEthernet1/0/1", "Ap1/0/1"),
+        ("gigabitethernet1/0/14", "Gi1/0/14"),
     ],
 )
 def test_normalize_port(raw, expected):

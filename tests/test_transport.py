@@ -36,3 +36,10 @@ def test_transport_error_redacts_password():
     err = NetmikoTransport._wrap("sw-a", Exception("auth failed for pw hunter2"), "hunter2")
     assert isinstance(err, TransportError)
     assert "hunter2" not in str(err) and "sw-a" in str(err) and "Exception" in str(err)
+
+
+def test_transport_error_redacts_enable_secret_too():
+    err = NetmikoTransport._wrap("sw-a", Exception("secret s3cret and pw hunter2"), "hunter2", "s3cret")
+    assert "s3cret" not in str(err) and "hunter2" not in str(err)
+    err = NetmikoTransport._wrap("sw-a", Exception("x"), "hunter2", None)
+    assert str(err) == "sw-a: Exception: x"

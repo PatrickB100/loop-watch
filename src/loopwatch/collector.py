@@ -3,7 +3,7 @@ import logging
 from collections.abc import Awaitable, Callable, Iterable
 from datetime import datetime, timedelta, timezone
 
-from loopwatch.detectors.context import DetectorContext
+from loopwatch.detectors.context import DetectorContext, new_log_lines
 from loopwatch.detectors.runner import run_detectors
 from loopwatch.detectors.storm import baseline_from_history
 from loopwatch.inventory import Inventory, Switch
@@ -53,7 +53,12 @@ def poll_once(
     prev: Snapshot | None,
     now: datetime,
 ) -> tuple[Snapshot | None, list[Event]]:
-    """One poll of one switch: fetch, parse, detect, store. Only TransportError is handled here."""
+    """One poll of one switch: fetch, parse, detect, store. Only TransportError is handled here.
+
+    Without an in-memory `prev` (service start, `snapshot` command) the newest stored snapshot is
+    the baseline, so a restart does not re-report the whole log buffer and every known neighbour."""
+    if prev is None:
+        prev = store.latest_snapshot(switch.name)
     try:
         raw = transport.run(switch, inv.credentials, switch.commands)
     except TransportError as exc:
@@ -75,7 +80,7 @@ def poll_once(
         uplink_ports=_uplink_ports(prev, inv),
     )
     events = run_detectors(ctx)
-    store.record_poll(switch.name, switch.host, now, now, snapshot, None)
+    store.record_poll(switch.name, switch.host, now, now, snapshot, None, new_log_lines=new_log_lines(ctx))
     store.write_events(events)
     return snapshot, events
 

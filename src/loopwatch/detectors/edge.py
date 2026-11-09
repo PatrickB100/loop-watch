@@ -29,7 +29,8 @@ def detect(ctx: DetectorContext) -> list[Event]:
         before = {(p.vlan, p.port): p for p in ctx.prev.stp_ports}
         for p in ctx.cur.stp_ports:
             old = before.get((p.vlan, p.port))
-            if p.port_type != "edge" or old is None or p.bpdu_received <= old.bpdu_received:
+            # IOS may drop operational portfast as soon as a BPDU arrives: the previous snapshot counts too.
+            if old is None or "edge" not in (p.port_type, old.port_type) or p.bpdu_received <= old.bpdu_received:
                 continue
             events.append(
                 Event(
