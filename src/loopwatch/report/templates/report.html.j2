@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>loop-watch report</title>
+<style>
+  body { font: 14px/1.4 -apple-system, "Segoe UI", sans-serif; margin: 2rem; color: #222; }
+  h1 { font-size: 1.4rem; } h2 { font-size: 1.1rem; margin-top: 2rem; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { text-align: left; padding: .3rem .6rem; border-bottom: 1px solid #ddd; vertical-align: top; }
+  th { background: #f3f3f3; }
+  .high { color: #b00020; font-weight: 600; } .medium { color: #b26a00; } .low { color: #555; }
+  code { font-family: ui-monospace, Menlo, monospace; }
+  .muted { color: #777; }
+</style>
+</head>
+<body>
+<h1>loop-watch report</h1>
+<p class="muted">{{ data.window[0] | fmt_time }} .. {{ data.window[1] | fmt_time }}</p>
+
+<h2>Suspects</h2>
+{% if data.suspects %}
+<table>
+<tr><th>#</th><th>Switch</th><th>Port</th><th>Score</th><th>Events</th></tr>
+{% for s in data.suspects %}
+<tr><td>{{ loop.index }}</td><td>{{ s.switch }}</td><td><code>{{ s.port }}</code></td><td>{{ s.score }}</td><td>{{ s | kinds }}</td></tr>
+{% endfor %}
+</table>
+{% else %}<p class="muted">No events in this window.</p>{% endif %}
+
+<h2>Topology change chain</h2>
+{% if data.chains %}
+<ul>
+{% for vlan, hops in data.chains.items() %}
+<li>VLAN {{ vlan }}: <code>{{ hops | chain }}</code></li>
+{% endfor %}
+</ul>
+{% else %}<p class="muted">None.</p>{% endif %}
+
+<h2>Timeline</h2>
+{% if data.events %}
+<table>
+<tr><th>Time</th><th>Switch</th><th>Kind</th><th>Severity</th><th>Port</th><th>VLAN</th><th>MAC</th><th>Reason</th></tr>
+{% for e in data.events %}
+<tr><td>{{ e.time.strftime("%Y-%m-%d %H:%M:%S") }}</td><td>{{ e.switch }}</td><td>{{ e.kind }}</td>
+<td class="{{ e.severity }}">{{ e.severity }}</td><td><code>{{ e.port or "-" }}</code></td>
+<td>{{ e.vlan if e.vlan is not none else "-" }}</td><td><code>{{ e.mac or "-" }}</code></td><td>{{ e.reason }}</td></tr>
+{% endfor %}
+</table>
+{% else %}<p class="muted">No events.</p>{% endif %}
+</body>
+</html>

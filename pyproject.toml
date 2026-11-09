@@ -24,6 +24,9 @@ loop-watch = "loopwatch.cli:main"
 [tool.hatch.build.targets.wheel]
 packages = ["src/loopwatch"]
 
+[tool.hatch.build]
+include = ["src/loopwatch/**/*.py", "src/loopwatch/report/templates/*.j2"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
