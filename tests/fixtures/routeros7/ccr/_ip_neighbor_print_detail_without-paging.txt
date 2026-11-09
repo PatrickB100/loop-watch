@@ -1,0 +1,7 @@
+ 0 interface=ether5 address=10.0.0.12 address4=10.0.0.12 mac-address=00:11:22:33:44:55 
+   identity="sw-floor2-a" platform="cisco" version="Cisco IOS Software, C2960X Software" unpack=none 
+   age=10s uptime=3d2h interface-name="GigabitEthernet1/0/48" system-caps=bridge,router 
+   system-caps-enabled=bridge discovered-by=cdp,lldp
+
+ 1 interface=ether2 address=10.0.0.40 mac-address=AA:BB:CC:00:00:40 identity="office-ap-1" 
+   platform="Ubiquiti" system-caps=bridge,wlan-ap system-caps-enabled=bridge,wlan-ap discovered-by=lldp

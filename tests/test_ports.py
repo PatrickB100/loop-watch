@@ -34,3 +34,7 @@ def test_normalize_port_unknown_prefix_is_returned_stripped():
 @pytest.mark.parametrize("raw", ["AABB.CCDD.EEFF", "aa:bb:cc:dd:ee:ff", "aa-bb-cc-dd-ee-ff", "aabbccddeeff"])
 def test_normalize_mac(raw):
     assert normalize_mac(raw) == "aabb.ccdd.eeff"
+
+
+def test_routeros_names_are_left_alone():
+    assert normalize_port("ether5") == "ether5" and normalize_port("sfp-sfpplus1") == "sfp-sfpplus1"

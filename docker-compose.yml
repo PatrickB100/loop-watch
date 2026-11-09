@@ -1,15 +1,36 @@
+# Works as a Portainer stack (paste as is, set the variables in the stack's Environment section)
+# and with plain `docker compose` (uncomment env_file, create .env from .env.example).
 services:
   loop-watch:
-    build: .
-    image: loop-watch
-    env_file: .env
-    environment:
-      LOOPWATCH_INVENTORY: /app/inventory.yaml
-      LOOPWATCH_DB: /data/loopwatch.sqlite
-    volumes:
-      - ./inventory.yaml:/app/inventory.yaml:ro
-      - loopwatch-data:/data
+    image: ghcr.io/patrickb100/loop-watch:latest
+    # build: .                    # instead of image:, to build from this checkout
+    container_name: loop-watch
     restart: unless-stopped
+    network_mode: host             # web page on the host's port, SSH to the switches without NAT
+    # env_file: .env
+    environment:
+      LOOPWATCH_INVENTORY: /data/inventory.yaml
+      LOOPWATCH_DB: /data/loopwatch.sqlite
+      LOOPWATCH_TZ: ${LOOPWATCH_TZ:-Europe/Amsterdam}
+      LOOPWATCH_WEB_PORT: ${LOOPWATCH_WEB_PORT:-8080}
+      LOOPWATCH_WEB_HOSTS: ${LOOPWATCH_WEB_HOSTS:-}   # e.g. 10.0.0.50,loopwatch.office
+      LOOPWATCH_SSH_USER: ${LOOPWATCH_SSH_USER}
+      LOOPWATCH_SSH_PASSWORD: ${LOOPWATCH_SSH_PASSWORD}
+      LOOPWATCH_SSH_ENABLE: ${LOOPWATCH_SSH_ENABLE:-}
+      LOOPWATCH_MIKROTIK_USER: ${LOOPWATCH_MIKROTIK_USER:-}
+      LOOPWATCH_MIKROTIK_PASSWORD: ${LOOPWATCH_MIKROTIK_PASSWORD:-}
+    volumes:
+      - loopwatch-data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os, urllib.request; urllib.request.urlopen(f\"http://127.0.0.1:{os.environ.get('LOOPWATCH_WEB_PORT', '8080')}/healthz\")"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   loopwatch-data:

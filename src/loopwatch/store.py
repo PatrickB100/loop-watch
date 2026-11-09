@@ -1,10 +1,10 @@
 import sqlite3
 import threading
-from collections.abc import Iterable
-from datetime import datetime, timedelta
+from collections.abc import Iterable, Set
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from loopwatch.model import Event, Interface, LogLine, MacEntry, Neighbor, Snapshot, StpPort, StpVlan
+from loopwatch.model import Event, Host, Interface, LogLine, MacEntry, Neighbor, Snapshot, StpPort, StpVlan
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS switches (
@@ -37,12 +37,22 @@ CREATE TABLE IF NOT EXISTS log_lines (
 CREATE INDEX IF NOT EXISTS log_lines_poll ON log_lines(poll_id);
 CREATE TABLE IF NOT EXISTS events (
     id INTEGER PRIMARY KEY, time TEXT NOT NULL, switch_id INTEGER NOT NULL REFERENCES switches(id),
-    kind TEXT NOT NULL, severity TEXT NOT NULL, port TEXT, vlan INTEGER, mac TEXT, reason TEXT NOT NULL);
+    kind TEXT NOT NULL, severity TEXT NOT NULL, port TEXT, vlan INTEGER, mac TEXT, reason TEXT NOT NULL,
+    other_port TEXT);
 CREATE INDEX IF NOT EXISTS events_time ON events(time);
+CREATE TABLE IF NOT EXISTS hosts (
+    mac TEXT PRIMARY KEY, ip TEXT, hostname TEXT, source TEXT, seen_at TEXT);
 """
 
+# Columns added after v1; init_schema adds them to an existing database.
+_MIGRATIONS: tuple[tuple[str, str, str], ...] = (
+    ("events", "other_port", "ALTER TABLE events ADD COLUMN other_port TEXT"),
+)
+
 def _iso(dt: datetime | None) -> str | None:
-    return dt.isoformat() if dt else None
+    """ISO text in UTC: SQLite compares these as strings, so every stored and queried value must
+    carry the same offset."""
+    return dt.astimezone(timezone.utc).isoformat() if dt else None
 
 
 def _dt(text: str) -> datetime:
@@ -84,6 +94,10 @@ class Store:
     def init_schema(self) -> None:
         with self.conn:
             self.conn.executescript(_SCHEMA)
+            for table, column, ddl in _MIGRATIONS:
+                columns = {r[1] for r in self.conn.execute(f"PRAGMA table_info({table})")}
+                if column not in columns:
+                    self.conn.execute(ddl)
 
     # --- writes -----------------------------------------------------------
 
@@ -155,11 +169,24 @@ class Store:
     def write_events(self, events: Iterable[Event]) -> None:
         rows = []
         for e in events:
-            rows.append((_iso(e.time), self._switch_id(e.switch), e.kind, e.severity, e.port, e.vlan, e.mac, e.reason))
+            rows.append((_iso(e.time), self._switch_id(e.switch), e.kind, e.severity, e.port, e.vlan, e.mac, e.reason,
+                         e.other_port))
         with self.conn:
             self.conn.executemany(
-                "INSERT INTO events(time, switch_id, kind, severity, port, vlan, mac, reason) VALUES (?,?,?,?,?,?,?,?)",
+                "INSERT INTO events(time, switch_id, kind, severity, port, vlan, mac, reason, other_port) "
+                "VALUES (?,?,?,?,?,?,?,?,?)",
                 rows,
+            )
+
+    @_locked
+    def upsert_hosts(self, hosts: Iterable[Host], source: str, seen: datetime) -> None:
+        """Remember hostname and IP per MAC; the latest sighting wins."""
+        with self.conn:
+            self.conn.executemany(
+                "INSERT INTO hosts(mac, ip, hostname, source, seen_at) VALUES (?,?,?,?,?) "
+                "ON CONFLICT(mac) DO UPDATE SET ip = excluded.ip, hostname = excluded.hostname, "
+                "source = excluded.source, seen_at = excluded.seen_at WHERE excluded.seen_at >= hosts.seen_at",
+                [(h.mac, h.ip, h.hostname, source, _iso(seen)) for h in hosts],
             )
 
     # --- reads ------------------------------------------------------------
@@ -170,14 +197,55 @@ class Store:
 
     @_locked
     def events(self, since: datetime, until: datetime, switch: str | None = None) -> list[Event]:
-        sql = ("SELECT e.time, s.name, e.kind, e.severity, e.reason, e.port, e.vlan, e.mac "
+        sql = ("SELECT e.time, s.name, e.kind, e.severity, e.reason, e.port, e.vlan, e.mac, e.other_port "
                "FROM events e JOIN switches s ON s.id = e.switch_id WHERE e.time >= ? AND e.time <= ?")
         args: list[object] = [_iso(since), _iso(until)]
         if switch is not None:
             sql += " AND s.name = ?"
             args.append(switch)
         sql += " ORDER BY e.time, e.id"
-        return [Event(_dt(r[0]), r[1], r[2], r[3], r[4], r[5], r[6], r[7]) for r in self.conn.execute(sql, args)]
+        return [Event(_dt(r[0]), r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8]) for r in self.conn.execute(sql, args)]
+
+    @_locked
+    def hosts_for(self, macs: Set[str]) -> dict[str, Host]:
+        if not macs:
+            return {}
+        marks = ",".join("?" * len(macs))
+        rows = self.conn.execute(f"SELECT mac, ip, hostname FROM hosts WHERE mac IN ({marks})", tuple(macs))
+        return {r[0]: Host(r[0], r[1], r[2], True) for r in rows}
+
+    @_locked
+    def log_lines(self, since: datetime, until: datetime) -> list[tuple[datetime, str, LogLine]]:
+        """Stored log lines of every device polled in the window: (polled at, device, line)."""
+        rows = self.conn.execute(
+            "SELECT p.finished_at, s.name, l.time, l.mnemonic, l.text FROM log_lines l "
+            "JOIN polls p ON p.id = l.poll_id JOIN switches s ON s.id = p.switch_id "
+            "WHERE p.finished_at >= ? AND p.finished_at <= ? ORDER BY p.finished_at, p.id, l.rowid",
+            (_iso(since), _iso(until)),
+        )
+        return [(_dt(r[0]), r[1], LogLine(_dt(r[2]) if r[2] else None, r[3], r[4])) for r in rows]
+
+    @_locked
+    def last_poll(self, switch: str) -> tuple[datetime, bool, str | None] | None:
+        row = self.conn.execute(
+            "SELECT p.finished_at, p.ok, p.error FROM polls p JOIN switches s ON s.id = p.switch_id "
+            "WHERE s.name = ? ORDER BY p.finished_at DESC, p.id DESC LIMIT 1",
+            (switch,),
+        ).fetchone()
+        return (_dt(row[0]), bool(row[1]), row[2]) if row else None
+
+    @_locked
+    def mac_ports(self, switch: str, since: datetime, until: datetime) -> dict[str, set[str]]:
+        """Every port each MAC was learned on, over the switch's polls in the window."""
+        rows = self.conn.execute(
+            "SELECT DISTINCT m.mac, m.port FROM mac_entries m JOIN polls p ON p.id = m.poll_id "
+            "JOIN switches s ON s.id = p.switch_id WHERE s.name = ? AND p.finished_at >= ? AND p.finished_at <= ?",
+            (switch, _iso(since), _iso(until)),
+        )
+        ports: dict[str, set[str]] = {}
+        for mac, port in rows:
+            ports.setdefault(mac, set()).add(port)
+        return ports
 
     @_locked
     def counter_history(self, switch: str, since: datetime) -> dict[str, list[tuple[datetime, int]]]:
@@ -269,3 +337,4 @@ class Store:
             # Child rows go with ON DELETE CASCADE; each child table has a poll_id index for it.
             self.conn.execute("DELETE FROM polls WHERE finished_at < ?", (snapshot_cutoff,))
             self.conn.execute("DELETE FROM events WHERE time < ?", (event_cutoff,))
+            self.conn.execute("DELETE FROM hosts WHERE seen_at < ?", (event_cutoff,))

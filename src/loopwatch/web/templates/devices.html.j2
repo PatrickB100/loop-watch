@@ -1,0 +1,23 @@
+{% extends "base.html.j2" %}
+{% set nav = "devices" %}
+{% block title %}loop-watch devices{% endblock %}
+{% block content %}
+{% if error %}<div class="banner"><b>Inventory file cannot be read</b>{{ error }}</div>{% endif %}
+<h2>Devices</h2>
+<div class="card">
+{% if rows %}
+<table>
+<tr><th>Name</th><th>Type</th><th>Host</th><th>Credentials</th><th>Interval</th><th>AP ports</th><th></th></tr>
+{% for s, problems in rows %}
+<tr>
+<td><b>{{ s.name }}</b>{% if problems %} <span class="bad" title="{{ problems | join('; ') }}">needs attention</span>{% endif %}</td>
+<td>{{ s.device_type }}</td><td><code>{{ s.host }}</code></td><td>{{ s.credentials }}</td><td>{{ s.poll_interval }} s</td>
+<td><code>{{ s.ap_ports | sort | join(", ") }}</code></td>
+<td><a href="/devices/{{ s.name }}">edit</a></td>
+</tr>
+{% endfor %}
+</table>
+{% else %}<p class="muted">No devices yet.</p>{% endif %}
+<p class="actions"><a class="btn primary" href="/devices/new">Add device</a></p>
+</div>
+{% endblock %}

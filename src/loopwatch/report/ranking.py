@@ -3,7 +3,8 @@ from dataclasses import dataclass
 
 from loopwatch.model import Event, Neighbor, StpVlan
 
-# Loops enter at edges; uplinks between managed switches mostly relay the symptoms.
+# Loops enter at edges; uplinks between managed switches and ports with an access point mostly
+# relay the symptoms, so both score half.
 UPLINK_DIVISOR = 2
 MAX_SUSPECTS = 10
 MAX_HOPS = 32
@@ -15,6 +16,7 @@ class Suspect:
     port: str
     score: int
     events: tuple[Event, ...]
+    label: str | None = None  # "uplink" | "ap" | None
 
 
 @dataclass(frozen=True)
@@ -42,7 +44,9 @@ def _score(events: Sequence[Event]) -> int:
     return score
 
 
-def rank_suspects(events: Sequence[Event], uplinks: Set[tuple[str, str]]) -> list[Suspect]:
+def rank_suspects(
+    events: Sequence[Event], uplinks: Set[tuple[str, str]], ap_ports: Set[tuple[str, str]] = frozenset()
+) -> list[Suspect]:
     by_port: dict[tuple[str, str], list[Event]] = {}
     for e in events:
         if e.port:
@@ -50,10 +54,11 @@ def rank_suspects(events: Sequence[Event], uplinks: Set[tuple[str, str]]) -> lis
     suspects: list[Suspect] = []
     for (switch, port), evs in by_port.items():
         score = _score(evs)
-        if (switch, port) in uplinks:
+        label = "uplink" if (switch, port) in uplinks else "ap" if (switch, port) in ap_ports else None
+        if label:
             score //= UPLINK_DIVISOR
         if score > 0:
-            suspects.append(Suspect(switch, port, score, tuple(evs)))
+            suspects.append(Suspect(switch, port, score, tuple(evs), label))
     suspects.sort(key=lambda s: (-s.score, s.switch, s.port))
     return suspects[:MAX_SUSPECTS]
 
@@ -74,6 +79,11 @@ def uplinks_from_neighbors(
         for n in neighbors
         if _managed_name(n.name, managed) is not None
     }
+
+
+def ap_ports_from_neighbors(neighbors_by_switch: Mapping[str, Sequence[Neighbor]]) -> set[tuple[str, str]]:
+    """Ports whose CDP/LLDP neighbour advertises wireless-AP capability."""
+    return {(switch, n.port) for switch, neighbors in neighbors_by_switch.items() for n in neighbors if "W" in n.capabilities}
 
 
 def tc_chain(

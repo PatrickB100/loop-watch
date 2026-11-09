@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "loopwatch"
-version = "0.1.0"
+version = "0.2.0"
 description = "Watches Cisco switches over SSH and reports where a layer-2 loop entered the network"
 requires-python = ">=3.12"
 dependencies = [
@@ -13,10 +13,12 @@ dependencies = [
     "PyYAML",
     "click",
     "Jinja2",
+    "netaddr",
+    "aiohttp",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest", "pytest-asyncio"]
+dev = ["pytest", "pytest-asyncio", "pytest-aiohttp"]
 
 [project.scripts]
 loop-watch = "loopwatch.cli:main"
@@ -25,7 +27,7 @@ loop-watch = "loopwatch.cli:main"
 packages = ["src/loopwatch"]
 
 [tool.hatch.build]
-include = ["src/loopwatch/**/*.py", "src/loopwatch/report/templates/*.j2"]
+include = ["src/loopwatch/**/*.py", "src/loopwatch/report/templates/*.j2", "src/loopwatch/web/templates/*.j2", "src/loopwatch/web/static/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -26,6 +26,7 @@ def detect(ctx: DetectorContext) -> list[Event]:
                     port=entry.port,
                     vlan=entry.vlan,
                     mac=entry.mac,
+                    other_port=old_port,
                 )
             )
     for line in new_log_lines(ctx):
@@ -42,6 +43,7 @@ def detect(ctx: DetectorContext) -> list[Event]:
                 port=normalize_port(m.group(3)) if m else None,
                 vlan=int(m.group(2)) if m else None,
                 mac=normalize_mac(m.group(1)) if m else None,
+                other_port=normalize_port(m.group(4)) if m else None,
             )
         )
     return events

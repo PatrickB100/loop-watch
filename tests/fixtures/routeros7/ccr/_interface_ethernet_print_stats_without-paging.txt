@@ -1,0 +1,19 @@
+                     name:  ether1   ether2   ether3
+                 rx-bytes:  9000000  8000000  0
+                rx-packet:  100000   200000   0
+             rx-broadcast:  1000     2000     0
+             rx-multicast:  500      600      0
+             rx-fcs-error:  0        0        0
+                 tx-bytes:  1000000  2000000  0
+                tx-packet:  110000   210000   0
+             tx-collision:  0        0        0
+
+                     name:  ether5   sfp-sfpplus1
+                 rx-bytes:  7000000  6000000
+                rx-packet:  300000   400000
+             rx-broadcast:  12000    100
+             rx-multicast:  700      50
+             rx-fcs-error:  3        0
+                 tx-bytes:  3000000  4000000
+                tx-packet:  310000   410000
+             tx-collision:  0        0

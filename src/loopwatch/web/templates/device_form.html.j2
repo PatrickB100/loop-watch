@@ -1,0 +1,48 @@
+{% extends "base.html.j2" %}
+{% set nav = "devices" %}
+{% block title %}loop-watch device{% endblock %}
+{% block content %}
+{% if test_result %}
+<div class="banner {% if test_result.ok %}ok{% endif %}"><b>Test connection {{ "succeeded" if test_result.ok else "failed" }}</b><code>{{ test_result.message }}</code></div>
+{% endif %}
+{% if errors %}
+<div class="banner"><b>Not saved</b><ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul></div>
+{% endif %}
+<h2>{{ "Add device" if is_new else "Edit device" }}</h2>
+<form class="card" method="post" action="{{ '/devices/new' if is_new else '/devices/' ~ switch.name }}">
+<div class="row"><label for="name">Name</label><div>
+<input id="name" type="text" name="name" value="{{ switch.name if switch else '' }}" required>
+<div class="hint">Letters, digits, dot, dash, underscore. Use the device's own hostname so CDP/LLDP uplinks are recognised.</div></div></div>
+<div class="row"><label for="host">Host</label><div><input id="host" type="text" name="host" value="{{ switch.host if switch else '' }}" required></div></div>
+<div class="row"><label for="device_type">Device type</label><div>
+<select id="device_type" name="device_type">
+{% for t in device_types %}<option {% if switch and switch.device_type == t %}selected{% endif %}>{{ t }}</option>{% endfor %}
+</select></div></div>
+<div class="row"><label for="credentials">Credential set</label><div>
+<select id="credentials" name="credentials">
+{% for c in credential_sets %}<option {% if (switch and switch.credentials == c) or (not switch and c == "ssh") %}selected{% endif %}>{{ c }}</option>{% endfor %}
+</select>
+<div class="hint">Sets found in the environment (LOOPWATCH_&lt;NAME&gt;_USER / _PASSWORD). Values are never shown.</div></div></div>
+<div class="row"><label for="poll_interval">Poll interval</label><div>
+<input id="poll_interval" type="number" name="poll_interval" min="10" max="3600" value="{{ switch.poll_interval if switch else 60 }}"> <span class="muted">seconds</span></div></div>
+<div class="row"><label for="ap_ports">Access-point ports</label><div>
+<input id="ap_ports" type="text" name="ap_ports" value="{{ switch.ap_ports | sort | join(', ') if switch else '' }}" placeholder="Gi1/0/20, Gi1/0/21">
+<div class="hint">Ports with a wireless access point. They score half, and flaps against them are read as a wireless-to-wired bridge.</div></div></div>
+<div class="row"><label>Skip commands</label><div class="chk">
+{% for family, types, commands in families %}
+<div class="muted">{{ types | join(", ") }}</div>
+{% for c in commands %}<label><input type="checkbox" name="skip" value="{{ c }}" {% if switch and c in switch.skip %}checked{% endif %}> {{ c }}</label>{% endfor %}
+{% endfor %}
+<div class="hint">Only for a command that is too slow on this device.</div></div></div>
+<div class="actions">
+<button class="btn primary">Save</button>
+<a class="btn" href="/devices">Cancel</a>
+</div>
+</form>
+{% if not is_new %}
+<div class="actions">
+<form method="post" action="/devices/{{ switch.name }}/test"><button class="btn">Test connection</button></form>
+<form method="post" action="/devices/{{ switch.name }}/delete" class="right" onsubmit="return confirm('Delete {{ switch.name }} from the inventory? Its history stays in the database.')"><button class="btn danger">Delete device</button></form>
+</div>
+{% endif %}
+{% endblock %}

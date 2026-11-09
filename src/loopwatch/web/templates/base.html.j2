@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}loop-watch{% endblock %}</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <b>loop-watch</b>
+  <a href="/" {% if nav == "home" %}class="on"{% endif %}>Home</a>
+  <a href="/report?since=2h" {% if nav == "report" %}class="on"{% endif %}>Report</a>
+  <a href="/devices" {% if nav == "devices" %}class="on"{% endif %}>Devices</a>
+  <span class="right muted">{{ now | fmt_time }}</span>
+</header>
+<main>
+{% block content %}{% endblock %}
+</main>
+</body>
+</html>

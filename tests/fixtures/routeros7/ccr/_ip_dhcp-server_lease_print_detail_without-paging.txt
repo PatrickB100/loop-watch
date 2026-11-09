@@ -1,0 +1,5 @@
+ 0 D address=10.0.10.183 mac-address=A4:B1:C2:D3:E4:F5 client-id=1:a4:b1:c2:d3:e4:f5 address-lists="" 
+   server=dhcp-lan dhcp-option="" status=bound expires-after=9h58m last-seen=1m12s 
+   active-address=10.0.10.183 active-mac-address=A4:B1:C2:D3:E4:F5 active-server=dhcp-lan host-name="tp-link-switch"
+
+ 1   address=10.0.10.57 mac-address=3C:22:FB:10:9A:01 server=dhcp-lan status=waiting last-seen=2d host-name="mbp-jdv"

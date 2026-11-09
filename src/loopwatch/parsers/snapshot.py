@@ -24,13 +24,16 @@ def _section(
     parse: Callable[[str], T],
     empty: T,
     errors: list[ParseError],
+    allow_empty: bool = False,
 ) -> T:
-    """Parse one command's output; any problem becomes a ParseError and `empty` is returned."""
+    """Parse one command's output; any problem becomes a ParseError and `empty` is returned.
+    `allow_empty` is for tables that are legitimately empty (no neighbours, no leases)."""
     text = raw.get(command)
     if text is None:  # skipped in the inventory
         return empty
     if not text.strip():
-        errors.append(ParseError(command, "empty output"))
+        if not allow_empty:
+            errors.append(ParseError(command, "empty output"))
         return empty
     if any(marker in text for marker in _CLI_ERRORS):
         errors.append(ParseError(command, text.strip()[:200]))

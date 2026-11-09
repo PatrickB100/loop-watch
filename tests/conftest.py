@@ -26,7 +26,7 @@ def creds() -> Credentials:
 
 @pytest.fixture
 def inv(sw_a, creds) -> Inventory:
-    return Inventory((sw_a, Switch(name="sw-core-1", host="10.0.0.1")), creds)
+    return Inventory((sw_a, Switch(name="sw-core-1", host="10.0.0.1")), {"ssh": creds})
 
 
 @pytest.fixture

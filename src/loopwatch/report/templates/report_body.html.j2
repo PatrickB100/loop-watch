@@ -1,0 +1,71 @@
+{# Report sections; included by the standalone report page and by the web layout. #}
+<p class="muted">{{ data.window[0] | fmt_time }} .. {{ data.window[1] | fmt_time }}</p>
+
+{% if data.diagnosis %}
+{% set d = data.diagnosis %}
+<h2>Diagnosis</h2>
+<div class="diagnosis">
+<p><b>{{ d.headline }}</b> <span class="muted">(first event {{ d.first_event | clock }})</span></p>
+<table>
+{% if d.connected %}
+<tr><th>Connected device</th><td colspan="4">{{ d.connected.name }} ({{ d.connected.platform }}, {{ d.connected.capabilities | sort | join(",") }}) via CDP/LLDP</td></tr>
+{% endif %}
+{% if d.attached %}
+<tr><th>On this port before</th><th>MAC</th><th>Vendor</th><th>Host (DHCP)</th><th>IP</th></tr>
+{% for h in d.attached %}
+<tr><td></td><td><code>{{ h.mac }}</code></td><td>{{ h.vendor }}</td><td>{{ h.hostname or "-" }}</td><td><code>{{ h.ip or "-" }}</code></td></tr>
+{% endfor %}
+{% endif %}
+{% if d.flapping %}
+<tr><th>Flapped through it</th><th>MAC</th><th>Vendor</th><th>Host (DHCP)</th><th>Other port</th></tr>
+{% for h in d.flapping %}
+<tr><td></td><td><code>{{ h.mac }}</code></td><td>{{ h.vendor }}</td><td>{{ h.hostname or "-" }}</td><td><code>{{ h.other_port or "-" }}</code></td></tr>
+{% endfor %}
+{% endif %}
+</table>
+{% for note in d.notes %}<p class="muted">{{ note }}</p>{% endfor %}
+</div>
+{% endif %}
+
+<h2>Suspects</h2>
+{% if data.suspects %}
+<table>
+<tr><th>#</th><th>Device</th><th>Port</th><th>Score</th><th>Events</th></tr>
+{% for s in data.suspects %}
+<tr><td>{{ loop.index }}</td><td>{{ s.switch }}</td><td><code>{{ s.port }}</code></td>
+<td>{{ s.score }}{% if s.label %} <span class="muted">({{ s.label }})</span>{% endif %}</td><td>{{ s | kinds }}</td></tr>
+{% endfor %}
+</table>
+{% else %}<p class="muted">No events in this window.</p>{% endif %}
+
+<h2>Topology change chain</h2>
+{% if data.chains %}
+<ul>
+{% for vlan, hops in data.chains.items() %}
+<li>VLAN {{ vlan }}: <code>{{ hops | chain }}</code></li>
+{% endfor %}
+</ul>
+{% else %}<p class="muted">None.</p>{% endif %}
+
+<h2>Timeline</h2>
+{% if data.events %}
+<table>
+<tr><th>Time</th><th>Device</th><th>Kind</th><th>Severity</th><th>Port</th><th>VLAN</th><th>MAC</th><th>Reason</th></tr>
+{% for e in data.events %}
+<tr><td>{{ e.time | clock }}</td><td>{{ e.switch }}</td><td>{{ e.kind }}</td>
+<td class="{{ e.severity }}">{{ e.severity }}</td><td><code>{{ e.port or "-" }}</code></td>
+<td>{{ e.vlan if e.vlan is not none else "-" }}</td><td><code>{{ e.mac or "-" }}</code></td><td>{{ e.reason }}</td></tr>
+{% endfor %}
+</table>
+{% else %}<p class="muted">No events.</p>{% endif %}
+
+<h2>Log</h2>
+{% if data.log_lines %}
+<table>
+<tr><th>Polled</th><th>Device</th><th>Device stamp</th><th>Line</th></tr>
+{% for polled, device, line in data.log_lines %}
+<tr><td>{{ polled | clock }}</td><td>{{ device }}</td><td>{{ line.time | stamp }}</td><td><code>{{ line.text }}</code></td></tr>
+{% endfor %}
+</table>
+<p class="muted">Device stamps are each device's own clock, shown as written.</p>
+{% else %}<p class="muted">No log lines.</p>{% endif %}

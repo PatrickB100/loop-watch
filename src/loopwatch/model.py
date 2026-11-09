@@ -92,6 +92,16 @@ class LogLine:
 
 
 @dataclass(frozen=True)
+class Host:
+    """A device known by MAC from a DHCP lease table."""
+
+    mac: str
+    ip: str | None
+    hostname: str | None
+    active: bool
+
+
+@dataclass(frozen=True)
 class ParseError:
     command: str
     message: str
@@ -109,6 +119,7 @@ class Snapshot:
     neighbors: tuple[Neighbor, ...]
     log_lines: tuple[LogLine, ...]
     parse_errors: tuple[ParseError, ...]
+    hosts: tuple[Host, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -121,3 +132,4 @@ class Event:
     port: str | None = None
     vlan: int | None = None
     mac: str | None = None
+    other_port: str | None = None  # for mac_flap: the port the MAC was seen on before

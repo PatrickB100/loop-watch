@@ -12,13 +12,14 @@ import click
 
 from loopwatch.collector import MAX_SESSIONS, poll_once, run_collector, utcnow
 from loopwatch.inventory import Inventory, InventoryError, load_inventory
-from loopwatch.report.render import build_report, render_html, render_text
+from loopwatch.profiles import profile_for, version_of
+from loopwatch.report.render import build_report, render_html, render_text, resolve_tz
 from loopwatch.store import Store
 from loopwatch.transport import FakeTransport, NetmikoTransport, RecordingTransport, Transport, TransportError
+from loopwatch.web.app import WebContext, create_app, serve
 
 SNAPSHOT_WINDOW = timedelta(minutes=15)
 _SINCE = re.compile(r"^(\d+)([mhd])$")
-_VERSION = re.compile(r"Version ([^,\s]+)")
 
 
 def parse_since(text: str) -> timedelta:
@@ -59,24 +60,62 @@ def main(ctx: click.Context, inventory_path: Path, db_path: Path) -> None:
     ctx.ensure_object(dict)
     ctx.obj["inventory_path"] = inventory_path
     ctx.obj["db_path"] = db_path
+    try:
+        ctx.obj["tz"] = resolve_tz(os.environ.get("LOOPWATCH_TZ"))
+    except ValueError as exc:
+        raise click.ClickException(f"LOOPWATCH_TZ: {exc}")
 
 
 @main.command()
+@click.option("--port", type=int, default=8080, envvar="LOOPWATCH_WEB_PORT", show_default=True, show_envvar=True,
+              help="Port for the web page.")
+@click.option("--no-web", is_flag=True, help="Run the collector without the web page.")
 @click.pass_context
-def watch(ctx: click.Context) -> None:
-    """Poll every switch continuously until stopped."""
+def watch(ctx: click.Context, port: int, no_web: bool) -> None:
+    """Poll every device continuously and serve the web page until stopped."""
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", stream=sys.stderr)
-    inv = _inventory(ctx.obj["inventory_path"])
+    log = logging.getLogger("loopwatch")
+    inventory_path: Path = ctx.obj["inventory_path"]
     stop = asyncio.Event()
 
     async def run() -> None:
         loop = asyncio.get_running_loop()
         for sig in (signal.SIGINT, signal.SIGTERM):
             loop.add_signal_handler(sig, stop.set)
-        with _open_store(ctx.obj["db_path"]) as store:
-            await run_collector(inv, NetmikoTransport(), store, stop=stop)
+        reload = asyncio.Event()
+        state: dict[str, object] = {"inventory_error": None, "collector": None}
 
-    logging.getLogger("loopwatch").info("watching %d switches", len(inv.switches))
+        def collector_alive() -> bool:
+            task = state["collector"]
+            return isinstance(task, asyncio.Task) and not task.done()
+
+        with _open_store(ctx.obj["db_path"]) as store:
+            runner = None
+            if not no_web:
+                allowed = frozenset(h.strip() for h in os.environ.get("LOOPWATCH_WEB_HOSTS", "").split(",") if h.strip())
+                web_ctx = WebContext(store, inventory_path, os.environ, ctx.obj["tz"], NetmikoTransport(), reload,
+                                     collector_alive, lambda: state["inventory_error"],  # type: ignore[arg-type]
+                                     allowed_hosts=allowed)
+                try:
+                    runner = await serve(create_app(web_ctx), port)
+                except OSError as exc:
+                    raise click.ClickException(f"cannot listen on port {port}: {exc}")
+                log.info("web page on port %d", port)
+            task = asyncio.create_task(
+                run_collector(
+                    lambda: load_inventory(inventory_path, os.environ), NetmikoTransport(), store,
+                    stop=stop, reload=reload, inventory_path=inventory_path,
+                    on_inventory_error=lambda message: state.__setitem__("inventory_error", message),
+                ),
+                name="collector",
+            )
+            state["collector"] = task
+            try:
+                await task
+            finally:
+                if runner is not None:
+                    await runner.cleanup()
+
     asyncio.run(run())
 
 
@@ -99,21 +138,23 @@ def report(ctx: click.Context, since_text: str | None, from_text: str | None, to
     else:
         since = until - parse_since(since_text or "2h")
     with _open_store(ctx.obj["db_path"]) as store:
-        managed = _managed_names(ctx.obj["inventory_path"], store)
-        data = build_report(store, managed, since, until)
+        managed, ap_ports = _managed(ctx.obj["inventory_path"], store)
+        data = build_report(store, managed, since, until, ap_ports)
     if html_path:
-        html_path.write_text(render_html(data))
+        html_path.write_text(render_html(data, ctx.obj["tz"]))
         click.echo(f"wrote {html_path}")
     else:
-        click.echo(render_text(data), nl=False)
+        click.echo(render_text(data, ctx.obj["tz"]), nl=False)
 
 
-def _managed_names(inventory_path: Path, store: Store) -> frozenset[str]:
-    """Managed switch names from the inventory when it is readable, else whatever the database knows."""
+def _managed(inventory_path: Path, store: Store) -> tuple[frozenset[str], frozenset[tuple[str, str]]]:
+    """Managed device names and access-point ports from the inventory when it is readable, else the
+    names the database knows and no AP ports."""
     try:
-        return load_inventory(inventory_path, {"LOOPWATCH_SSH_USER": "x", "LOOPWATCH_SSH_PASSWORD": "x"}).names
+        inv = load_inventory(inventory_path, os.environ)
+        return inv.names, inv.ap_ports()
     except (FileNotFoundError, InventoryError):
-        return frozenset(store.switches())
+        return frozenset(store.switches()), frozenset()
 
 
 @main.command()
@@ -141,26 +182,27 @@ def snapshot(ctx: click.Context, switches: tuple[str, ...], record_dir: Path | N
             for future, sw in futures.items():
                 snap, events = future.result()
                 click.echo(f"{sw.name}: {'ok' if snap else 'unreachable'}, {len(events)} event(s)", err=True)
-        data = build_report(store, inv.names, now - SNAPSHOT_WINDOW, now)
-    click.echo(render_text(data), nl=False)
+        data = build_report(store, inv.names, now - SNAPSHOT_WINDOW, now, inv.ap_ports())
+    click.echo(render_text(data, ctx.obj["tz"]), nl=False)
 
 
 @main.command("check-inventory")
 @click.option("--transport-fixtures", type=click.Path(path_type=Path), default=None, hidden=True)
 @click.pass_context
 def check_inventory(ctx: click.Context, transport_fixtures: Path | None) -> None:
-    """Connect to every switch once and run `show version`."""
+    """Connect to every device once and read its software version."""
     inv = _inventory(ctx.obj["inventory_path"])
     transport = _transport(transport_fixtures)
     failed = 0
     for sw in inv.switches:
+        profile = profile_for(sw.device_type)
         try:
-            out = transport.run(sw, inv.credentials, ["show version"])
+            out = transport.run(sw, inv.credentials_for(sw), [profile.version_command])
         except TransportError as exc:
             failed += 1
             click.echo(f"{sw.name:<24} FAIL {exc.message}")
             continue
-        m = _VERSION.search(out["show version"])
-        click.echo(f"{sw.name:<24} ok   {m.group(1) if m else 'version unknown'}")
+        version = version_of(profile, out[profile.version_command])
+        click.echo(f"{sw.name:<24} ok   {version or 'version unknown'}")
     if failed:
         sys.exit(1)

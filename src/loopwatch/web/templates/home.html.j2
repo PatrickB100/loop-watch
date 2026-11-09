@@ -1,0 +1,48 @@
+{% extends "base.html.j2" %}
+{% set nav = "home" %}
+{% block content %}
+{% if error %}
+<div class="banner"><b>Inventory not loaded</b>{{ error }}</div>
+{% endif %}
+
+<h2>Devices</h2>
+<div class="card">
+{% if rows %}
+<table>
+<tr><th>Device</th><th>Type</th><th>Host</th><th>Last poll</th><th>Status</th><th>Events 1 h</th><th>High</th></tr>
+{% for r in rows %}
+<tr>
+<td><b>{{ r.switch.name }}</b></td><td>{{ r.switch.device_type }}</td><td><code>{{ r.switch.host }}</code></td>
+<td>{{ r.last | clock }}</td>
+<td>{% if r.ok is none %}<span class="muted">not polled yet</span>{% elif r.ok %}<span class="ok">ok</span>{% else %}<span class="bad">unreachable</span>{% endif %}</td>
+<td>{{ r.events }}</td><td>{% if r.high %}<span class="bad">{{ r.high }}</span>{% else %}0{% endif %}</td>
+</tr>
+{% endfor %}
+</table>
+{% else %}
+<p>No devices yet. <a class="btn" href="/devices/new">Add device</a></p>
+{% endif %}
+</div>
+
+{% if data.diagnosis %}
+<h2>Diagnosis, last 2 hours</h2>
+<div class="card diagnosis"><p><b>{{ data.diagnosis.headline }}</b> <a href="/report?since=2h">details</a></p></div>
+{% endif %}
+
+<h2>Suspects, last 2 hours</h2>
+<div class="card">
+{% if data.suspects %}
+<table>
+<tr><th>#</th><th>Device</th><th>Port</th><th>Score</th><th>Evidence</th></tr>
+{% for s in data.suspects[:5] %}
+<tr><td>{{ loop.index }}</td><td>{{ s.switch }}</td><td><code>{{ s.port }}</code></td>
+<td><b>{{ s.score }}</b>{% if s.label %} <span class="muted">({{ s.label }})</span>{% endif %}</td><td>{{ s | kinds }}</td></tr>
+{% endfor %}
+</table>
+{% else %}<p class="muted">No events in the last 2 hours.</p>{% endif %}
+</div>
+
+<p class="links">Report:
+<a href="/report?since=15m">last 15 min</a><a href="/report?since=2h">2 h</a>
+<a href="/report?since=24h">24 h</a><a href="/report?since=7d">7 days</a></p>
+{% endblock %}
