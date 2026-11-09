@@ -43,3 +43,30 @@ def test_transport_error_redacts_enable_secret_too():
     assert "s3cret" not in str(err) and "hunter2" not in str(err)
     err = NetmikoTransport._wrap("sw-a", Exception("x"), "hunter2", None)
     assert str(err) == "sw-a: Exception: x"
+
+
+def test_netmiko_transport_sends_only_the_requested_commands(monkeypatch, sw_a, creds):
+    import sys
+    import types
+
+    sent: list[str] = []
+
+    class FakeConn:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def enable(self):
+            pass
+
+        def send_command(self, cmd, **kw):
+            sent.append(cmd)
+            return f"out of {cmd}"
+
+    fake = types.ModuleType("netmiko")
+    fake.ConnectHandler = lambda **kw: FakeConn()  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "netmiko", fake)
+    out = NetmikoTransport().run(sw_a, creds, ["show version"])
+    assert sent == ["show version"] and out == {"show version": "out of show version"}

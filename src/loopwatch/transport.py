@@ -70,7 +70,7 @@ class NetmikoTransport:
             ) as conn:
                 if credentials.enable:
                     conn.enable()
-                conn.send_command("terminal length 0", read_timeout=self.command_timeout)
+                # netmiko disables paging in session_preparation for Cisco and RouterOS alike.
                 for command in commands:
                     out[command] = conn.send_command(command, read_timeout=self.command_timeout)
         except Exception as exc:  # netmiko raises many exception types; all become TransportError
