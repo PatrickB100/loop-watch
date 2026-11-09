@@ -18,9 +18,16 @@ def test_event_kinds():
         "stp_role_change",
         "mac_flap",
         "broadcast_storm",
+        "unicast_flood",
         "unexpected_neighbor",
         "link_flap",
         "err_disable",
         "unreachable",
         "parse_error",
     }
+
+
+def test_unicast_flood_is_an_event_kind():
+    from loopwatch.model import EVENT_KINDS
+
+    assert "unicast_flood" in EVENT_KINDS

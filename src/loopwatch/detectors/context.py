@@ -1,5 +1,5 @@
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from loopwatch.model import Event, LogLine, Snapshot
 
@@ -11,6 +11,7 @@ class DetectorContext:
     baseline_pps: Mapping[str, float]  # port -> rolling median broadcast+multicast pps
     recent_events: Sequence[Event]  # this switch's events from the last few minutes
     uplink_ports: frozenset[str]  # ports that face another managed switch
+    baseline_total_pps: Mapping[str, float] = field(default_factory=dict)  # port -> rolling median of all input pps
 
 
 def log_reason(line: LogLine) -> str:

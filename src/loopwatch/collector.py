@@ -82,6 +82,7 @@ def poll_once(
         baseline_pps=baseline_from_history(store.counter_history(switch.name, now - BASELINE_WINDOW)),
         recent_events=store.events(now - RECENT_WINDOW, now, switch.name),
         uplink_ports=_uplink_ports(prev, inv),
+        baseline_total_pps=baseline_from_history(store.counter_history(switch.name, now - BASELINE_WINDOW, total=True)),
     )
     events = run_detectors(ctx)
     store.record_poll(switch.name, switch.host, now, now, snapshot, None, new_log_lines=new_log_lines(ctx))

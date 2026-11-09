@@ -14,8 +14,10 @@ Design: [v1](docs/superpowers/specs/2026-11-09-loop-watch-design.md),
 Every 60 seconds per device (10 seconds while something is happening):
 spanning-tree topology changes and the port they came from, MAC addresses
 moving between ports, broadcast and multicast rates against each port's own
-baseline, switches or BPDUs appearing on portfast (edge) ports, link flaps,
-err-disabled ports, and devices that stop answering. The MikroTik router
+baseline, unicast flooding (the total input rate jumping while broadcasts
+stay normal), storm-control filter and shutdown log lines, switches or BPDUs
+appearing on portfast (edge) ports, link flaps, err-disabled ports, and
+devices that stop answering. The MikroTik router
 contributes its log, interface rates, neighbours and DHCP leases, so MACs
 in the report come with a hostname and IP address.
 
@@ -87,7 +89,7 @@ Times are shown in `LOOPWATCH_TZ` (IANA name, default UTC).
   wired adapters.
 - **Suspects** scores each port from the events against it. A switch on an
   edge port or an err-disabled port counts most, then MAC flaps per distinct
-  MAC, broadcast storms, and topology changes. Uplinks between managed
+  MAC, broadcast storms and unicast floods, and topology changes. Uplinks between managed
   devices and ports with an access point score half.
 - **Topology change chain** follows "last topology change from port X" from
   switch to switch through CDP towards the edge.
@@ -174,7 +176,8 @@ real MAC addresses, hostnames and IP addresses before committing.
 ## Thresholds
 
 Detector thresholds are constants with comments in
-`src/loopwatch/detectors/storm.py` (storm factor and minimum rate),
+`src/loopwatch/detectors/storm.py` (storm factor, minimum broadcast rate,
+minimum total rate for unicast flooding),
 `src/loopwatch/detectors/stp.py` (topology change escalation) and
 `src/loopwatch/detectors/links.py` (link flap count). Poll intervals,
 escalation and the inventory check interval live in
