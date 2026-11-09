@@ -1,0 +1,35 @@
+
+ VLAN0010 is executing the rstp compatible Spanning Tree protocol
+  Bridge Identifier has priority 32768, sysid 10, address 7c21.0e00.0a10
+  Configured hello time 2, max age 20, forward delay 15, transmit hold-count 6
+  Current root has priority 4106, address 0011.2233.0001
+  Root port is 49 (TwentyFiveGigE1/1/1), cost of root path is 800
+  Topology change flag not set, detected flag not set
+  Number of topology changes 7 last change occurred 1d02h ago
+          from TwentyFiveGigE1/1/1
+  Times:  hold 1, topology change 35, notification 2
+          hello 2, max age 20, forward delay 15 
+  Timers: hello 0, topology change 0, notification 0, aging 300
+
+ Port 5 (GigabitEthernet1/0/5) of VLAN0010 is designated forwarding 
+   Port path cost 4, Port priority 128, Port Identifier 128.5.
+   Designated root has priority 4106, address 0011.2233.0001
+   Designated bridge has priority 32778, address 7c21.0e00.0a10
+   Designated port id is 128.5, designated path cost 800
+   Timers: message age 0, forward delay 0, hold 0
+   Number of transitions to forwarding state: 1
+   The port is in the portfast edge mode
+   Link type is point-to-point by default
+   Bpdu guard is enabled
+   BPDU: sent 40211, received 0
+
+ Port 49 (TwentyFiveGigE1/1/1) of VLAN0010 is root forwarding 
+   Port path cost 800, Port priority 128, Port Identifier 128.49.
+   Designated root has priority 4106, address 0011.2233.0001
+   Designated bridge has priority 4106, address 0011.2233.0001
+   Designated port id is 128.2, designated path cost 0
+   Timers: message age 15, forward delay 0, hold 0
+   Number of transitions to forwarding state: 1
+   Link type is point-to-point by default
+   BPDU: sent 12, received 40200
+
