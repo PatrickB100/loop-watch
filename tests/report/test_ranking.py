@@ -1,5 +1,5 @@
 from loopwatch.model import Neighbor, StpVlan
-from loopwatch.report.ranking import rank_suspects, tc_chain, uplinks_from_neighbors
+from loopwatch.report.ranking import ap_ports_from_neighbors, rank_suspects, tc_chain, uplinks_from_neighbors
 from tests.detectors.builders import make_event
 
 
@@ -57,3 +57,23 @@ def test_tc_chain_stops_on_cycle():
 def test_tc_chain_without_last_port_is_single_hop():
     stp = {"a": [StpVlan(10, "r", 1, None, None)]}
     assert tc_chain(10, stp, {}, start="a") == []
+
+
+def test_ap_port_scores_half_and_is_labelled():
+    events = [make_event("mac_flap", "Gi1/0/20", 1, mac="aaaa.bbbb.cccc"),
+              make_event("mac_flap", "Gi1/0/14", 1, mac="aaaa.bbbb.cccc")]
+    s = {x.port: x for x in rank_suspects(events, set(), {("sw-a", "Gi1/0/20")})}
+    assert s["Gi1/0/20"].score == 10 and s["Gi1/0/20"].label == "ap"
+    assert s["Gi1/0/14"].score == 20 and s["Gi1/0/14"].label is None
+
+
+def test_uplink_label():
+    events = [make_event("mac_flap", "Gi1/0/48", 1, mac="aaaa.bbbb.cccc")]
+    (s,) = rank_suspects(events, {("sw-a", "Gi1/0/48")})
+    assert s.label == "uplink" and s.score == 10
+
+
+def test_ap_ports_from_lldp_capability():
+    n = {"sw-a": [Neighbor("Gi1/0/20", "office-ap-1", "eth0", "Ubiquiti", frozenset({"B", "W"})),
+                  Neighbor("Gi1/0/48", "sw-core-1", "Te1/1/2", "cisco", frozenset({"S"}))]}
+    assert ap_ports_from_neighbors(n) == {("sw-a", "Gi1/0/20")}

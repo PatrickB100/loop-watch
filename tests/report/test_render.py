@@ -5,7 +5,7 @@ import pytest
 
 from loopwatch.model import Event, Neighbor, StpVlan
 from loopwatch.report.ranking import ChainHop, Suspect
-from loopwatch.report.render import ReportData, build_report, render_html, render_text
+from loopwatch.report.render import ReportData, build_report, render_html, render_text, resolve_tz
 from loopwatch.store import Store
 from tests.conftest import NOW
 from tests.detectors.builders import make_event, make_snapshot
@@ -74,3 +74,34 @@ def test_render_html_escapes_and_lists_events(report_data):
     html = render_html(data)
     assert "&lt;script&gt;" in html and "<script>" not in html
     assert "<table" in html and "Gi1/0/14" in html and "<!doctype html>" in html.lower()
+
+
+def test_times_render_in_requested_zone(report_data):
+    from zoneinfo import ZoneInfo
+
+    assert "10:40:00 sw-a" in render_text(report_data, ZoneInfo("Europe/Amsterdam"))
+    assert "09:40:00 sw-a" in render_text(report_data)
+
+
+def test_html_has_log_section_and_labels(seeded_store):
+    data = build_report(seeded_store, {"sw-a", "sw-core-1"}, NOW - timedelta(hours=1), NOW)
+    html = render_html(data)
+    assert "<h2>Log</h2>" in html and "MACFLAP" in html
+    assert "uplink" in html  # Gi1/0/48 faces sw-core-1
+    assert "(uplink)" in render_text(data)
+
+
+def test_ap_ports_from_inventory_reach_the_ranking(seeded_store):
+    data = build_report(seeded_store, {"sw-a", "sw-core-1"}, NOW - timedelta(hours=1), NOW,
+                        ap_ports={("sw-a", "Gi1/0/14")})
+    top = data.suspects[0]
+    assert top.port != "Gi1/0/14" or top.label == "ap"
+    gi14 = next(s for s in data.suspects if s.port == "Gi1/0/14")
+    assert gi14.label == "ap" and gi14.score == 45  # (50 + 10 + 30) // 2
+
+
+def test_resolve_tz():
+    assert resolve_tz(None).utcoffset(NOW) == timedelta(0)
+    assert resolve_tz("").utcoffset(NOW) == timedelta(0)
+    with pytest.raises(ValueError, match="unknown time zone 'Mars/Olympus'"):
+        resolve_tz("Mars/Olympus")

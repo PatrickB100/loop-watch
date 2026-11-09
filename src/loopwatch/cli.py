@@ -13,7 +13,7 @@ import click
 from loopwatch.collector import MAX_SESSIONS, poll_once, run_collector, utcnow
 from loopwatch.inventory import Inventory, InventoryError, load_inventory
 from loopwatch.profiles import profile_for, version_of
-from loopwatch.report.render import build_report, render_html, render_text
+from loopwatch.report.render import build_report, render_html, render_text, resolve_tz
 from loopwatch.store import Store
 from loopwatch.transport import FakeTransport, NetmikoTransport, RecordingTransport, Transport, TransportError
 
@@ -59,6 +59,10 @@ def main(ctx: click.Context, inventory_path: Path, db_path: Path) -> None:
     ctx.ensure_object(dict)
     ctx.obj["inventory_path"] = inventory_path
     ctx.obj["db_path"] = db_path
+    try:
+        ctx.obj["tz"] = resolve_tz(os.environ.get("LOOPWATCH_TZ"))
+    except ValueError as exc:
+        raise click.ClickException(f"LOOPWATCH_TZ: {exc}")
 
 
 @main.command()
@@ -99,21 +103,23 @@ def report(ctx: click.Context, since_text: str | None, from_text: str | None, to
     else:
         since = until - parse_since(since_text or "2h")
     with _open_store(ctx.obj["db_path"]) as store:
-        managed = _managed_names(ctx.obj["inventory_path"], store)
-        data = build_report(store, managed, since, until)
+        managed, ap_ports = _managed(ctx.obj["inventory_path"], store)
+        data = build_report(store, managed, since, until, ap_ports)
     if html_path:
-        html_path.write_text(render_html(data))
+        html_path.write_text(render_html(data, ctx.obj["tz"]))
         click.echo(f"wrote {html_path}")
     else:
-        click.echo(render_text(data), nl=False)
+        click.echo(render_text(data, ctx.obj["tz"]), nl=False)
 
 
-def _managed_names(inventory_path: Path, store: Store) -> frozenset[str]:
-    """Managed switch names from the inventory when it is readable, else whatever the database knows."""
+def _managed(inventory_path: Path, store: Store) -> tuple[frozenset[str], frozenset[tuple[str, str]]]:
+    """Managed device names and access-point ports from the inventory when it is readable, else the
+    names the database knows and no AP ports."""
     try:
-        return load_inventory(inventory_path, os.environ).names
+        inv = load_inventory(inventory_path, os.environ)
+        return inv.names, inv.ap_ports()
     except (FileNotFoundError, InventoryError):
-        return frozenset(store.switches())
+        return frozenset(store.switches()), frozenset()
 
 
 @main.command()
@@ -141,8 +147,8 @@ def snapshot(ctx: click.Context, switches: tuple[str, ...], record_dir: Path | N
             for future, sw in futures.items():
                 snap, events = future.result()
                 click.echo(f"{sw.name}: {'ok' if snap else 'unreachable'}, {len(events)} event(s)", err=True)
-        data = build_report(store, inv.names, now - SNAPSHOT_WINDOW, now)
-    click.echo(render_text(data), nl=False)
+        data = build_report(store, inv.names, now - SNAPSHOT_WINDOW, now, inv.ap_ports())
+    click.echo(render_text(data, ctx.obj["tz"]), nl=False)
 
 
 @main.command("check-inventory")
