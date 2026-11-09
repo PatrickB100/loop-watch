@@ -22,6 +22,9 @@ and a port for the page.
 - A published container image on GitHub Container Registry that a Portainer
   stack can pull, with the inventory living on the data volume.
 - Times shown in the office time zone.
+- A diagnosis at the top of every report: the port the loop most likely
+  entered on, the device connected there, and the MAC addresses involved
+  with hostname, IP address and vendor where known.
 
 Decisions already taken with the owner: device list editable from the page,
 credentials stay in the environment; no login, LAN only, `network_mode:
@@ -34,6 +37,7 @@ MAC table.
 - Login or any access control on the page.
 - Alerting, syslog receiver (still v3 candidates).
 - MikroTik bridge host (MAC) table and STP state.
+- Hostnames from DNS or ARP; only DHCP leases and LLDP/CDP are used.
 - Running the container as a non-root user (would break upgrades of an
   existing root-owned volume; deferred).
 
@@ -64,8 +68,9 @@ store and the transport through `asyncio.to_thread`, as the collector does.
 | `inventory` | `Switch` gains `credentials` (set name). `Inventory` holds all credential sets. New `save_inventory`, `validate_device`. |
 | `transport` | `NetmikoTransport` stops sending `terminal length 0`; netmiko disables paging itself on both platforms and RouterOS rejects the command. |
 | `collector` | `run_collector` takes a loader and a `reload` event instead of a fixed inventory; starts, stops and restarts per-device workers on change. |
-| `store` | `log_lines(since, until)` for the log page; `last_poll(switch)` for the home page. |
-| `report/render` | `tz` parameter; `fmt_time` renders in that zone. HTML report body becomes a partial that the web layout includes. |
+| `store` | `log_lines(since, until)` for the log page; `last_poll(switch)` for the home page; `hosts` table and `other_port` column; `macs_on_port(switch, port, since, until)`. |
+| `report/diagnosis.py` | New. Builds the Diagnosis for the top suspect (see Culprit identification). |
+| `report/render` | `tz` parameter; Diagnosis section; `fmt_time` renders in that zone. HTML report body becomes a partial that the web layout includes. |
 | `web` | New package: aiohttp app, routes, templates. |
 | `cli` | `watch` starts the web server; `--no-web`; `check-inventory` and `snapshot` use the profile's version command. Env `LOOPWATCH_WEB_PORT`, `LOOPWATCH_TZ`. |
 | `.github/workflows` | New: `ci.yml` (pytest on every push and PR), `publish.yml` (image to ghcr.io on push to `main` and on `v*` tags). |
@@ -110,6 +115,7 @@ change anything.
 | `/interface ethernet print stats without-paging` | `rx-packet`, `tx-packet`, `rx-broadcast`, `rx-multicast`; `in_errors` = sum of `rx-*` keys containing `error`, `fcs`, `align`, `overflow`, `too-short`, `too-long`; `out_errors` = sum of `tx-*` keys containing `error`, `collision`, `underrun`. Layout: property rows with one column per interface, repeated in blocks that each start with a `name:` row. |
 | `/ip neighbor print detail without-paging` | `interface` → port, `identity` → name, `interface-name` → remote port, `platform` + `board` → platform, `system-caps` → capabilities. |
 | `/log print without-paging` | Lines whose topics include `interface`, `bridge`, `stp`, `dhcp`, `error` or `critical`. |
+| `/ip dhcp-server lease print detail without-paging` | `mac-address`, `address`, `host-name`, `status` for the hosts table. Empty output means no leases, not a parse error. |
 
 Mapping into the shared `Snapshot`:
 
@@ -139,6 +145,53 @@ memory, not from the CCR2116. They are a hypothesis until
 once against the real router; the parsers must then be corrected against
 that capture. A layout the parser cannot read becomes a `parse_error` event,
 never a crash, as in v1.
+
+## Culprit identification
+
+The report answers "which device" above the suspect table, in a Diagnosis
+section built from stored data for the top suspect `(switch, port)`:
+
+1. **Entry point**: the suspect port and the time of its first event in the
+   window.
+2. **Connected device**: the CDP/LLDP neighbour on that port in the latest
+   snapshot at or before the window end (identity, platform, capabilities).
+   Without one: the MACs learned on that port, and on no other port of that
+   switch, in the hour before the first event, from `mac_entries`. These
+   are the devices physically attached. An unmanaged switch that sends no
+   frames of its own shows up only through its clients, and the text says
+   so.
+3. **Flapping MACs**: distinct MACs from `mac_flap` events naming the port,
+   each with the other port of the flap. The text explains that these are
+   usually victims seen through the loop (the gateway, servers), not the
+   cause. When every flap pairs the same two ports and no new neighbour or
+   MAC appeared on either, the diagnosis reads "cable or unmanaged device
+   between A and B" and names both ports.
+4. **Per MAC**: vendor from the OUI prefix (offline, `netaddr`), and
+   hostname, IP address and lease status from the `hosts` table.
+
+Supporting changes:
+
+- `Event` gains `other_port: str | None = None`, written by the MAC-flap
+  detector and read by the diagnosis. The `events` table gets the column
+  with an `ALTER TABLE` on `init_schema` when it is missing, so an existing
+  v1 database keeps working.
+- New `hosts(mac PRIMARY KEY, ip, hostname, source, seen_at)` table,
+  upserted from every MikroTik poll's lease table (`source = "dhcp:<device>"`)
+  and from CDP/LLDP neighbours that carry a management address
+  (`source = "lldp:<device>"`). The latest sighting wins. Pruned with the
+  180-day event retention.
+- `Snapshot` gains `hosts: tuple[Host, ...]` (`Host(mac, ip, hostname,
+  active)`), empty for Cisco devices in this version.
+- `report/diagnosis.py`: `diagnose(store, data, until) -> Diagnosis | None`,
+  rendered at the top of the text and HTML reports and on the home page for
+  the last two hours. Returns `None` when the window has no suspects.
+- Vendor lookup through `netaddr`'s bundled IEEE OUI registry; an unknown
+  prefix renders as "unknown vendor". `netaddr` is the second new
+  dependency after `aiohttp`.
+
+Limits, stated in the report text: without DHCP leases or LLDP the device
+is known only by MAC and vendor; a loop made by one cable between two wall
+ports has no new device at all, only the two ports.
 
 ## Credentials
 
@@ -294,6 +347,11 @@ Storage and all comparisons stay UTC.
   the YAML file; test-connection success and failure; `Origin` mismatch
   gives 403; `/healthz` ok and 503; no credential value in any response.
 - Time zone: one render test with `Europe/Amsterdam`.
+- Diagnosis: scenario with LLDP neighbour on the port; scenario without
+  neighbour but with MACs learned on the port before the loop and DHCP
+  leases from a router fixture; the two-ports cable case; a window with no
+  suspects returns `None`; vendor lookup for a known and an unknown prefix.
+- Store: `other_port` column added to a v1 database on `init_schema`.
 - No test opens a network connection or needs Docker.
 
 ## Risks
