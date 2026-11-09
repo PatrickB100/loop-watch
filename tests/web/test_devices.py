@@ -78,3 +78,24 @@ async def test_cross_origin_post_is_refused(client, ctx):
     r = await client.post("/devices/sw-a/delete", headers={"Origin": f"http://{client.host}:{client.port}"},
                           allow_redirects=False)
     assert r.status == 303
+
+
+async def test_host_allowlist_defeats_dns_rebinding(aiohttp_client, ctx):
+    from dataclasses import replace
+
+    from loopwatch.web.app import create_app
+
+    client = await aiohttp_client(create_app(replace(ctx, allowed_hosts=frozenset({"loopwatch.office", "10.0.0.50"}))))
+    assert (await client.get("/", headers={"Host": "evil.example:8080"})).status == 403
+    assert (await client.post("/devices/sw-a/delete", headers={"Host": "evil.example:8080", "Origin": "http://evil.example:8080"},
+                              allow_redirects=False)).status == 403
+    assert (await client.get("/", headers={"Host": "loopwatch.office:8080"})).status == 200
+    assert (await client.get("/healthz", headers={"Host": "10.0.0.50"})).status == 200
+    assert "sw-a" in load_inventory(ctx.inventory_path, ctx.env).names
+
+
+async def test_cross_site_fetch_metadata_is_refused(client, ctx):
+    r = await client.post("/devices/sw-a/delete", headers={"Sec-Fetch-Site": "cross-site"}, allow_redirects=False)
+    assert r.status == 403 and "sw-a" in load_inventory(ctx.inventory_path, ctx.env).names
+    r = await client.post("/devices/sw-a/delete", headers={"Sec-Fetch-Site": "same-origin"}, allow_redirects=False)
+    assert r.status == 303

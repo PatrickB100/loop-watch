@@ -1,3 +1,5 @@
+from loopwatch.web.app import create_app
+
 async def test_home_lists_devices_and_suspects(client):
     r = await client.get("/")
     body = await r.text()
@@ -33,3 +35,26 @@ async def test_healthz(client, ctx):
     assert r.status == 200 and (await r.json())["devices"] == 2
     ctx.collector_alive = lambda: False
     assert (await client.get("/healthz")).status == 503
+
+
+async def test_report_window_in_local_zone_finds_the_event(aiohttp_client, ctx):
+    from dataclasses import replace
+    from zoneinfo import ZoneInfo
+
+    client = await aiohttp_client(create_app(replace(ctx, tz=ZoneInfo("Europe/Amsterdam"))))
+    # the storm is at 09:40 UTC = 10:40 Amsterdam
+    body = await (await client.get("/report?from=2026-11-09T10:30&to=2026-11-09T10:50")).text()
+    assert "broadcast_storm" in body
+    body = await (await client.get("/report?from=2026-11-09T09:30&to=2026-11-09T09:50")).text()
+    assert "broadcast_storm" not in body
+
+
+async def test_malformed_inventory_file_is_shown_not_a_500(client, ctx):
+    ctx.inventory_path.write_text("switches: 5\n")
+    for path in ("/", "/devices", "/devices/new", "/devices/sw-a"):
+        r = await client.get(path)
+        body = await r.text()
+        assert r.status in (200, 500) and "switches" in body and "Traceback" not in body, path
+    assert (await client.get("/healthz")).status == 200
+    r = await client.post("/devices/sw-a/delete", allow_redirects=False)
+    assert r.status == 500 and "Traceback" not in await r.text()

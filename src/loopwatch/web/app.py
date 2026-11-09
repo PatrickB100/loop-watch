@@ -48,6 +48,7 @@ class WebContext:
     collector_alive: Callable[[], bool]
     inventory_error: Callable[[], str | None]  # the collector's last load error, if any
     clock: Callable[[], datetime] = utcnow
+    allowed_hosts: frozenset[str] = frozenset()  # Host header names/IPs accepted; empty = any
 
 
 def parse_since(text: str) -> timedelta:
@@ -274,17 +275,34 @@ async def device_test(request: web.Request) -> web.Response:
 
 @web.middleware
 async def same_origin(request: web.Request, handler):
-    """Refuse POSTs whose Origin names another host: the only guard, by decision, against a page
-    elsewhere on the LAN driving a browser that can reach this one."""
+    """The guards a page without login gets: an optional Host allowlist (defeats DNS rebinding,
+    where Origin and Host both carry the attacker's name), and for POSTs a matching Origin and
+    no cross-site fetch metadata."""
+    ctx: WebContext = request.app[CTX_KEY]
+    if ctx.allowed_hosts:
+        hostname = urlsplit("//" + request.host).hostname or ""
+        if hostname not in ctx.allowed_hosts:
+            raise web.HTTPForbidden(text=f"host {hostname!r} is not in LOOPWATCH_WEB_HOSTS")
     if request.method == "POST":
         origin = request.headers.get("Origin")
         if origin and urlsplit(origin).netloc != request.host:
             raise web.HTTPForbidden(text="cross-origin request refused")
+        if request.headers.get("Sec-Fetch-Site") == "cross-site":
+            raise web.HTTPForbidden(text="cross-site request refused")
     return await handler(request)
 
 
+@web.middleware
+async def inventory_errors(request: web.Request, handler):
+    """A broken inventory file is shown, not a stack trace."""
+    try:
+        return await handler(request)
+    except InventoryError as exc:
+        return _render(request, "error.html.j2", status=500, title="Inventory file cannot be read", message=str(exc))
+
+
 def create_app(ctx: WebContext) -> web.Application:
-    app = web.Application(middlewares=[same_origin])
+    app = web.Application(middlewares=[same_origin, inventory_errors])
     app[CTX_KEY] = ctx
     app[JINJA_KEY] = _env(ctx.tz)
     app.router.add_get("/", home)

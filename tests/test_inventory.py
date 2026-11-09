@@ -9,6 +9,7 @@ from loopwatch.inventory import (
     Switch,
     credential_sets_from_env,
     load_inventory,
+    parse_inventory,
     save_inventory,
     validate_device,
 )
@@ -111,3 +112,18 @@ def test_save_then_load_round_trip(tmp_path):
     assert "LOOPWATCH" not in text and "password" not in text.lower()
     assert load_inventory(p, env).switches == switches
     assert not list(tmp_path.glob("*.tmp*"))  # temp file replaced, not left behind
+
+
+@pytest.mark.parametrize("text", [
+    "switches:\n  - {name: a, host: h, poll_interval: abc}\n",
+    "switches: [foo]\n",
+    "switches:\n  - {name: a, host: h, skip: 5}\n",
+    "switches: 5\n",
+    "- just a list\n",
+    "switches: [\n",
+])
+def test_malformed_files_raise_inventory_error(tmp_path, text):
+    p = tmp_path / "i.yaml"
+    p.write_text(text)
+    with pytest.raises(InventoryError):
+        parse_inventory(p)

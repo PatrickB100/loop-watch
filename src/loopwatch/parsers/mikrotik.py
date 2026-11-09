@@ -26,10 +26,12 @@ RELEVANT_TOPICS = frozenset({"interface", "bridge", "stp", "dhcp", "error", "cri
 _TABLE_ROW = re.compile(r"^\s*(\d+)\s+(?:([DXRS]{1,4})\s+)?(\S+)\s+(\S+)")
 _ENTRY_START = re.compile(r"^\s*\d+\s")
 _TOKEN = re.compile(r'([a-z0-9-]+)=("([^"]*)"|\S*)')
+# Stamps: "10:42:11" (today), "nov/08 10:42:11", "nov/08/2025 10:42:11", or "2025-11-08 10:42:11" (RouterOS 7.10+).
 _LOG = re.compile(
-    r"^\s*(?:(?P<mon>[a-z]{3})/(?P<day>\d\d)(?:/(?P<year>\d{4}))? )?(?P<hms>\d\d:\d\d:\d\d) "
-    r"(?P<topics>[a-z][a-z,-]*) (?P<msg>.*)$"
+    r"^\s*(?:(?:(?P<mon>[a-z]{3})/(?P<day>\d\d)(?:/(?P<year>\d{4}))?|(?P<iso>\d{4}-\d{2}-\d{2})) )?"
+    r"(?P<hms>\d\d:\d\d:\d\d) (?P<topics>[a-z][a-z,-]*) (?P<msg>.*)$"
 )
+_NAME_TOKEN = re.compile(r"\S+")
 _LINK_LINE = re.compile(r"^\S+ link (?:up|down)")
 _RX_ERROR = re.compile(r"^rx-.*(error|fcs|align|overflow|too-short|too-long)")
 _TX_ERROR = re.compile(r"^tx-.*(error|collision|underrun)")
@@ -41,12 +43,18 @@ _CAPS = {"bridge": "B", "switch": "S", "router": "R", "telephone": "T", "wlan-ap
 def parse_interface_list(text: str) -> dict[str, str]:
     """name -> link state for interfaces of type `ether` (physical ports, including SFP)."""
     links: dict[str, str] = {}
+    rows = 0
     for line in text.splitlines():
         m = _TABLE_ROW.match(line)
-        if not m or m.group(4) != "ether":
+        if not m:
+            continue
+        rows += 1
+        if m.group(4) != "ether":
             continue
         flags = m.group(2) or ""
         links[m.group(3)] = "disabled" if "X" in flags else "connected" if "R" in flags else "notconnect"
+    if text.strip() and rows == 0:
+        raise ValueError("unrecognised /interface print layout")
     return links
 
 
@@ -54,26 +62,36 @@ def parse_ethernet_stats(text: str) -> dict[str, dict[str, int]]:
     """`print stats` lays properties out as rows with one column per interface, in blocks that
     each start with a `name:` row. Returns name -> {property: value}."""
     stats: dict[str, dict[str, int]] = {}
-    names: list[str] = []
+    columns: list[tuple[str, int]] = []  # (interface name, column where its values start)
     for line in text.splitlines():
         if ":" not in line:
-            names = []
+            columns = []
             continue
         key, _, rest = line.partition(":")
         key = key.strip()
-        values = rest.split()
         if key == "name":
-            names = values
-            for n in names:
-                stats.setdefault(n, {})
+            offset = len(line) - len(rest)
+            columns = [(m.group(0), offset + m.start()) for m in _NAME_TOKEN.finditer(rest)]
+            for name, _ in columns:
+                stats.setdefault(name, {})
             continue
-        if not names:
+        if not columns:
             continue
-        for name, value in zip(names, values):
+        # Values sit under their interface name; slice by column so digits grouped with spaces
+        # ("1 234 567") stay with the right interface and a short row is noticed, not shifted.
+        for i, (name, start) in enumerate(columns):
+            end = columns[i + 1][1] if i + 1 < len(columns) else len(line)
+            cell = line[start:end].strip()
+            if not cell:
+                raise ValueError(f"stats row {key!r} does not line up with the interface names")
             try:
-                stats[name][key] = int(value)
+                stats[name][key] = int(cell.replace(" ", "").replace(",", ""))
             except ValueError:
-                continue
+                continue  # a non-numeric property; not what the detectors read
+    if text.strip() and not stats:
+        raise ValueError("unrecognised /interface ethernet print stats layout")
+    if stats and not any("rx-packet" in v for v in stats.values()):
+        raise ValueError("no rx-packet counters found in /interface ethernet print stats")
     return stats
 
 
@@ -106,7 +124,7 @@ def parse_ip_neighbors(text: str) -> tuple[Neighbor, ...]:
         platform = " ".join(p for p in (e.get("platform"), e.get("board")) if p)
         out.append(
             Neighbor(
-                port=e["interface"],
+                port=e["interface"].split(",")[0],  # "ether5,bridge1" for a bridge member port
                 name=e.get("identity", ""),
                 remote_port=normalize_port(e.get("interface-name", "")),
                 platform=platform,
@@ -119,6 +137,8 @@ def parse_ip_neighbors(text: str) -> tuple[Neighbor, ...]:
 def _log_time(m: re.Match[str], now: datetime) -> datetime | None:
     hms = m.group("hms")
     try:
+        if m.group("iso"):
+            return datetime.strptime(f"{m.group('iso')} {hms}", "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
         if m.group("mon") is None:
             return datetime.combine(now.date(), datetime.strptime(hms, "%H:%M:%S").time(), tzinfo=timezone.utc)
         year = m.group("year") or str(now.year)
@@ -133,15 +153,19 @@ def _log_time(m: re.Match[str], now: datetime) -> datetime | None:
 
 def parse_log(text: str, now: datetime) -> tuple[LogLine, ...]:
     lines: list[LogLine] = []
+    matched = 0
     for raw in text.splitlines():
         m = _LOG.match(raw)  # RouterOS prints months and topics in lowercase
         if not m:
             continue
+        matched += 1
         topics, msg = m.group("topics"), m.group("msg")
         if not RELEVANT_TOPICS & set(topics.split(",")):
             continue
         mnemonic = "LINK-3-UPDOWN" if _LINK_LINE.match(msg) else topics
         lines.append(LogLine(_log_time(m, now), mnemonic, msg))
+    if text.strip() and matched == 0:
+        raise ValueError("unrecognised /log print layout")
     return tuple(lines)
 
 

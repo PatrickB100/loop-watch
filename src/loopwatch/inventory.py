@@ -157,11 +157,21 @@ def parse_inventory(path: Path) -> tuple[list[Switch], Mapping[str, object]]:
         raise InventoryError(f"{path.name} is not valid YAML: {exc}") from None
     if not isinstance(data, Mapping):
         raise InventoryError(f"{path.name} must be a mapping with a 'switches' list")
-    defaults: Mapping[str, object] = data.get("defaults") or {}
+    defaults = data.get("defaults") or {}
+    if not isinstance(defaults, Mapping):
+        raise InventoryError("'defaults' must be a mapping")
+    entries = data.get("switches") or []
+    if not isinstance(entries, list):
+        raise InventoryError("'switches' must be a list of devices")
     switches: list[Switch] = []
     seen: set[str] = set()
-    for raw in data.get("switches") or []:
-        switch = _entry(raw, defaults)
+    for i, raw in enumerate(entries, 1):
+        if not isinstance(raw, Mapping):
+            raise InventoryError(f"switches entry {i} must be a mapping with name and host, got {raw!r}")
+        try:
+            switch = _entry(raw, defaults)
+        except (TypeError, ValueError, AttributeError) as exc:
+            raise InventoryError(f"switches entry {i} ({raw.get('name', '?')}): {exc}") from None
         if switch.name in seen:
             raise InventoryError(f"duplicate switch name: {switch.name}")
         seen.add(switch.name)

@@ -1,4 +1,6 @@
 from dataclasses import replace
+
+import pytest
 from datetime import datetime, timedelta, timezone
 
 from loopwatch.detectors.context import DetectorContext
@@ -83,3 +85,39 @@ def test_router_storm_fires_but_stp_and_mac_stay_silent():
     t1 = replace(parse_mikrotik_snapshot("ccr", r, NOW + timedelta(seconds=60)), taken_at=NOW + timedelta(seconds=60))
     events = run_detectors(DetectorContext(t0, t1, {"ether5": 100.0}, [], frozenset()))
     assert {e.kind for e in events} == {"broadcast_storm"} and events[0].port == "ether5"
+
+
+def test_ethernet_stats_slices_by_column_so_grouped_digits_survive():
+    text = ("                     name:  ether1      ether2\n"
+            "                 rx-bytes:  1 234 567   89\n"
+            "                rx-packet:  12 345      6\n")
+    stats = parse_ethernet_stats(text)
+    assert stats["ether1"]["rx-bytes"] == 1234567 and stats["ether2"]["rx-bytes"] == 89
+    assert stats["ether1"]["rx-packet"] == 12345 and stats["ether2"]["rx-packet"] == 6
+
+
+def test_ethernet_stats_misaligned_row_or_missing_packets_raise():
+    with pytest.raises(ValueError, match="does not line up"):
+        parse_ethernet_stats("   name:  ether1  ether2\n   rx-packet:  5\n")
+    with pytest.raises(ValueError, match="rx-packet"):
+        parse_ethernet_stats("   name:  ether1\n   rx-bytes:  5\n")
+
+
+def test_unrecognised_layouts_raise_instead_of_returning_nothing():
+    for parse in (parse_interface_list, parse_ethernet_stats):
+        with pytest.raises(ValueError, match="unrecognised"):
+            parse("bad command name print (line 1 column 2)\n")
+    with pytest.raises(ValueError, match="unrecognised"):
+        parse_log("bad command name print (line 1 column 2)\n", NOW)
+    assert parse_interface_list("") == {} and parse_log("", NOW) == ()
+
+
+def test_neighbor_on_bridge_member_port_keeps_the_physical_port():
+    text = ' 0 interface=ether5,bridge1 address=10.0.0.12 identity="sw-floor2-a" system-caps=bridge\n'
+    (n,) = parse_ip_neighbors(text)
+    assert n.port == "ether5"
+
+
+def test_log_accepts_iso_dates():
+    lines = parse_log(" 2025-11-08 10:42:11 interface,info ether7 link down\n", NOW)
+    assert lines[0].time == datetime(2025, 11, 8, 10, 42, 11, tzinfo=timezone.utc) and lines[0].text == "ether7 link down"

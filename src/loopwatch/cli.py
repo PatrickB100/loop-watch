@@ -92,8 +92,10 @@ def watch(ctx: click.Context, port: int, no_web: bool) -> None:
         with _open_store(ctx.obj["db_path"]) as store:
             runner = None
             if not no_web:
+                allowed = frozenset(h.strip() for h in os.environ.get("LOOPWATCH_WEB_HOSTS", "").split(",") if h.strip())
                 web_ctx = WebContext(store, inventory_path, os.environ, ctx.obj["tz"], NetmikoTransport(), reload,
-                                     collector_alive, lambda: state["inventory_error"])  # type: ignore[arg-type]
+                                     collector_alive, lambda: state["inventory_error"],  # type: ignore[arg-type]
+                                     allowed_hosts=allowed)
                 try:
                     runner = await serve(create_app(web_ctx), port)
                 except OSError as exc:

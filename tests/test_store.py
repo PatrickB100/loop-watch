@@ -170,3 +170,15 @@ def test_log_lines_last_poll_and_mac_ports(store, snap_a):
     assert store.last_poll("sw-a") == (NOW, True, None) and store.last_poll("nope") is None
     ports = store.mac_ports("sw-a", NOW - timedelta(minutes=1), NOW)
     assert all(isinstance(v, set) for v in ports.values()) and len(ports) == len({m.mac for m in snap_a.macs})
+
+
+def test_events_window_with_offset_bounds_is_compared_in_utc(store):
+    from datetime import timezone as _tz
+    from zoneinfo import ZoneInfo
+
+    store.write_events([Event(NOW - timedelta(minutes=30), "sw-a", "broadcast_storm", "high", "storm", port="Gi1/0/14")])
+    ams = ZoneInfo("Europe/Amsterdam")
+    since = (NOW - timedelta(minutes=40)).astimezone(ams)   # 10:20 local, 09:20 UTC
+    until = (NOW - timedelta(minutes=20)).astimezone(ams)   # 10:40 local, 09:40 UTC
+    assert len(store.events(since, until)) == 1
+    assert store.events(since.replace(tzinfo=_tz.utc), until.replace(tzinfo=_tz.utc)) == []  # 10:20-10:40 UTC: empty

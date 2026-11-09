@@ -52,6 +52,17 @@ The stack uses `network_mode: host`, so the page listens on the host's own
 port (`LOOPWATCH_WEB_PORT`, default 8080) and there is no port mapping to
 change.
 
+Set `LOOPWATCH_WEB_HOSTS` to the names and IP addresses you open the page
+as, for example `10.0.0.50,loopwatch.office`. The page has no login, and
+whoever can change a device's host can point the tool, and its SSH password,
+at a machine they control. The allowlist stops a hostile website from doing
+that through DNS rebinding; the office firewall stops everyone outside the
+LAN. Both are needed.
+
+**Upgrading from v1:** the inventory moved from the read-only bind mount to
+`/data/inventory.yaml` on the volume. Copy your old `inventory.yaml` there,
+or add the devices again on the *Devices* page.
+
 ## The web page
 
 - **Home**: every device with its last poll and status, the diagnosis and

@@ -1,7 +1,7 @@
 import sqlite3
 import threading
 from collections.abc import Iterable, Set
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from loopwatch.model import Event, Host, Interface, LogLine, MacEntry, Neighbor, Snapshot, StpPort, StpVlan
@@ -50,7 +50,9 @@ _MIGRATIONS: tuple[tuple[str, str, str], ...] = (
 )
 
 def _iso(dt: datetime | None) -> str | None:
-    return dt.isoformat() if dt else None
+    """ISO text in UTC: SQLite compares these as strings, so every stored and queried value must
+    carry the same offset."""
+    return dt.astimezone(timezone.utc).isoformat() if dt else None
 
 
 def _dt(text: str) -> datetime:
