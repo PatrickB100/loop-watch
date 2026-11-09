@@ -140,3 +140,8 @@ def test_help_lists_commands():
     assert r.exit_code == 0
     for cmd in ("watch", "report", "snapshot", "check-inventory"):
         assert cmd in r.output
+
+
+def test_watch_no_web_flag_and_port_option_exist():
+    out = CliRunner().invoke(main, ["watch", "--help"]).output
+    assert "--no-web" in out and "--port" in out and "LOOPWATCH_WEB_PORT" in out

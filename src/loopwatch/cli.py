@@ -16,6 +16,7 @@ from loopwatch.profiles import profile_for, version_of
 from loopwatch.report.render import build_report, render_html, render_text, resolve_tz
 from loopwatch.store import Store
 from loopwatch.transport import FakeTransport, NetmikoTransport, RecordingTransport, Transport, TransportError
+from loopwatch.web.app import WebContext, create_app, serve
 
 SNAPSHOT_WINDOW = timedelta(minutes=15)
 _SINCE = re.compile(r"^(\d+)([mhd])$")
@@ -66,10 +67,14 @@ def main(ctx: click.Context, inventory_path: Path, db_path: Path) -> None:
 
 
 @main.command()
+@click.option("--port", type=int, default=8080, envvar="LOOPWATCH_WEB_PORT", show_default=True, show_envvar=True,
+              help="Port for the web page.")
+@click.option("--no-web", is_flag=True, help="Run the collector without the web page.")
 @click.pass_context
-def watch(ctx: click.Context) -> None:
-    """Poll every switch continuously until stopped."""
+def watch(ctx: click.Context, port: int, no_web: bool) -> None:
+    """Poll every device continuously and serve the web page until stopped."""
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", stream=sys.stderr)
+    log = logging.getLogger("loopwatch")
     inventory_path: Path = ctx.obj["inventory_path"]
     stop = asyncio.Event()
 
@@ -77,9 +82,37 @@ def watch(ctx: click.Context) -> None:
         loop = asyncio.get_running_loop()
         for sig in (signal.SIGINT, signal.SIGTERM):
             loop.add_signal_handler(sig, stop.set)
+        reload = asyncio.Event()
+        state: dict[str, object] = {"inventory_error": None, "collector": None}
+
+        def collector_alive() -> bool:
+            task = state["collector"]
+            return isinstance(task, asyncio.Task) and not task.done()
+
         with _open_store(ctx.obj["db_path"]) as store:
-            await run_collector(lambda: load_inventory(inventory_path, os.environ), NetmikoTransport(), store,
-                                stop=stop, inventory_path=inventory_path)
+            runner = None
+            if not no_web:
+                web_ctx = WebContext(store, inventory_path, os.environ, ctx.obj["tz"], NetmikoTransport(), reload,
+                                     collector_alive, lambda: state["inventory_error"])  # type: ignore[arg-type]
+                try:
+                    runner = await serve(create_app(web_ctx), port)
+                except OSError as exc:
+                    raise click.ClickException(f"cannot listen on port {port}: {exc}")
+                log.info("web page on port %d", port)
+            task = asyncio.create_task(
+                run_collector(
+                    lambda: load_inventory(inventory_path, os.environ), NetmikoTransport(), store,
+                    stop=stop, reload=reload, inventory_path=inventory_path,
+                    on_inventory_error=lambda message: state.__setitem__("inventory_error", message),
+                ),
+                name="collector",
+            )
+            state["collector"] = task
+            try:
+                await task
+            finally:
+                if runner is not None:
+                    await runner.cleanup()
 
     asyncio.run(run())
 

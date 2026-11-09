@@ -1,10 +1,17 @@
-# Copy to inventory.yaml and fill in your switches. Credentials come from .env, never from here.
+# The web page writes this file for you; edit it by hand only when the page is not running.
+# Credentials come from the environment, never from here.
 switches:
-  - name: sw-core-1
+  - name: sw-core-1                 # must equal the switch's hostname (CDP/LLDP identity)
     host: 10.0.0.1
   - name: sw-floor2-a
     host: 10.0.0.12
+    ap_ports: [Gi1/0/20, Gi1/0/21]  # ports with a wireless access point
     # skip: [show mac address-table dynamic]   # drop a command that is too slow on one switch
+  - name: ccr
+    host: 10.0.0.254
+    device_type: mikrotik_routeros
+    credentials: mikrotik           # LOOPWATCH_MIKROTIK_USER / LOOPWATCH_MIKROTIK_PASSWORD
 defaults:
   device_type: cisco_ios
+  credentials: ssh                  # LOOPWATCH_SSH_USER / LOOPWATCH_SSH_PASSWORD
   poll_interval: 60
