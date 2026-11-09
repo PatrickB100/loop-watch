@@ -1,4 +1,5 @@
 import sqlite3
+import threading
 from collections.abc import Iterable
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -47,10 +48,24 @@ def _dt(text: str) -> datetime:
     return datetime.fromisoformat(text)
 
 
+def _locked(method):
+    def wrapper(self, *args, **kwargs):
+        with self._lock:
+            return method(self, *args, **kwargs)
+
+    wrapper.__name__ = method.__name__
+    wrapper.__doc__ = method.__doc__
+    return wrapper
+
+
 class Store:
+    """SQLite store. One connection, shared across threads and serialised by a lock: the
+    collector writes from asyncio.to_thread workers and prunes from the event-loop thread."""
+
     def __init__(self, path: Path | str) -> None:
         self.path = str(path)
-        self.conn = sqlite3.connect(self.path)
+        self._lock = threading.RLock()
+        self.conn = sqlite3.connect(self.path, check_same_thread=False)
         self.conn.execute("PRAGMA foreign_keys = ON")
         if self.path != ":memory:":
             self.conn.execute("PRAGMA journal_mode = WAL")
@@ -64,6 +79,7 @@ class Store:
     def close(self) -> None:
         self.conn.close()
 
+    @_locked
     def init_schema(self) -> None:
         with self.conn:
             self.conn.executescript(_SCHEMA)
@@ -84,6 +100,7 @@ class Store:
         row = self.conn.execute("SELECT id FROM switches WHERE name = ?", (name,)).fetchone()
         return int(row[0])
 
+    @_locked
     def record_poll(
         self,
         switch: str,
@@ -129,6 +146,7 @@ class Store:
             [(poll_id, _iso(line.time), line.mnemonic, line.text) for line in s.log_lines],
         )
 
+    @_locked
     def write_events(self, events: Iterable[Event]) -> None:
         rows = []
         for e in events:
@@ -141,9 +159,11 @@ class Store:
 
     # --- reads ------------------------------------------------------------
 
+    @_locked
     def switches(self) -> list[str]:
         return [r[0] for r in self.conn.execute("SELECT name FROM switches ORDER BY name")]
 
+    @_locked
     def events(self, since: datetime, until: datetime, switch: str | None = None) -> list[Event]:
         sql = ("SELECT e.time, s.name, e.kind, e.severity, e.reason, e.port, e.vlan, e.mac "
                "FROM events e JOIN switches s ON s.id = e.switch_id WHERE e.time >= ? AND e.time <= ?")
@@ -154,6 +174,7 @@ class Store:
         sql += " ORDER BY e.time, e.id"
         return [Event(_dt(r[0]), r[1], r[2], r[3], r[4], r[5], r[6], r[7]) for r in self.conn.execute(sql, args)]
 
+    @_locked
     def counter_history(self, switch: str, since: datetime) -> dict[str, list[tuple[datetime, int]]]:
         rows = self.conn.execute(
             "SELECT p.finished_at, i.name, i.broadcast + i.multicast FROM interfaces i "
@@ -174,6 +195,7 @@ class Store:
         ).fetchone()
         return int(row[0]) if row else None
 
+    @_locked
     def latest_stp_vlans(self, switch: str, until: datetime) -> list[StpVlan]:
         poll_id = self._latest_ok_poll(switch, until)
         if poll_id is None:
@@ -184,6 +206,7 @@ class Store:
         )
         return [StpVlan(r[0], r[1], r[2], r[3], r[4]) for r in rows]
 
+    @_locked
     def latest_neighbors(self, switch: str, until: datetime) -> list[Neighbor]:
         poll_id = self._latest_ok_poll(switch, until)
         if poll_id is None:
@@ -196,6 +219,7 @@ class Store:
 
     # --- maintenance ------------------------------------------------------
 
+    @_locked
     def prune(self, now: datetime, snapshot_days: int = 14, event_days: int = 180) -> None:
         snapshot_cutoff = _iso(now - timedelta(days=snapshot_days))
         event_cutoff = _iso(now - timedelta(days=event_days))

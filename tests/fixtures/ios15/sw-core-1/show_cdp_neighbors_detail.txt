@@ -1,0 +1,20 @@
+-------------------------
+Device ID: sw-a.office.local
+Entry address(es): 
+  IP address: 10.0.0.5
+Platform: cisco WS-C2960X-48FPD-L,  Capabilities: Switch IGMP 
+Interface: GigabitEthernet1/0/1,  Port ID (outgoing port): GigabitEthernet1/0/48
+Holdtime : 170 sec
+
+Version :
+Cisco IOS Software, C2960X Software (C2960X-UNIVERSALK9-M), Version 15.2(7)E7, RELEASE SOFTWARE (fc2)
+
+advertisement version: 2
+VTP Management Domain: ''
+Native VLAN: 1
+Duplex: full
+Management address(es): 
+  IP address: 10.0.0.5
+
+
+Total cdp entries displayed : 1

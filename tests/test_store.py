@@ -87,3 +87,13 @@ def test_file_store_persists(tmp_path, snap_a):
     with Store(path) as s:
         s.init_schema()
         assert s.switches() == ["sw-a"]
+
+
+def test_store_usable_from_worker_thread(store, snap_a):
+    import concurrent.futures
+
+    # The collector polls in asyncio.to_thread workers and prunes from the event loop thread.
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [pool.submit(store.record_poll, "sw-a", "h", NOW, NOW, snap_a, None) for _ in range(4)]
+        assert sorted(f.result() for f in futures) == [1, 2, 3, 4]
+    assert len(store.counter_history("sw-a", NOW - timedelta(hours=1))["Gi1/0/14"]) == 4

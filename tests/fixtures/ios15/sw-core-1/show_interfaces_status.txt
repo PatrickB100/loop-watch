@@ -1,0 +1,3 @@
+
+Port      Name               Status       Vlan       Duplex  Speed Type 
+Gi1/0/1   downlink sw-a      connected    trunk      a-full a-1000 10/100/1000BaseTX
