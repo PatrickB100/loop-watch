@@ -1,0 +1,28 @@
+Syslog logging: enabled (0 messages dropped, 0 messages rate-limited, 0 flushes, 0 overruns, xml disabled, filtering disabled)
+
+No Active Message Discriminator.
+
+No Inactive Message Discriminator.
+
+    Console logging: level debugging, 127 messages logged, xml disabled,
+                     filtering disabled
+    Monitor logging: level debugging, 0 messages logged, xml disabled,
+                     filtering disabled
+    Buffer logging:  level debugging, 127 messages logged, xml disabled,
+                     filtering disabled
+    Exception Logging: size (4096 bytes)
+    Count and timestamp logging messages: disabled
+    Persistent logging: disabled
+
+No active filter modules.
+
+    Trap logging: level informational, 131 message lines logged
+        Logging Source-Interface:       VRF Name:
+
+Log Buffer (65536 bytes):
+
+000123: *Nov  9 09:41:58.102 CET: %LINK-3-UPDOWN: Interface GigabitEthernet1/0/14, changed state to up
+000124: *Nov  9 09:41:59.001 CET: %LINEPROTO-5-UPDOWN: Line protocol on Interface GigabitEthernet1/0/14, changed state to up
+000125: .Nov  9 09:42:10.500 CET: %SW_MATM-4-MACFLAP_NOTIF: Host aabb.cc00.0002 in vlan 10 is flapping between port Gi1/0/14 and port Gi1/0/48
+000126: Nov  9 09:42:11 CET: %SPANTREE-5-TOPOTRAP: Topology Change Trap for vlan 10
+000127: %SYS-5-CONFIG_I: Configured from console by admin on vty0

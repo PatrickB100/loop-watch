@@ -16,6 +16,8 @@ EVENT_KINDS: frozenset[str] = frozenset(
 )
 
 _BRIDGE_CAPABILITIES = frozenset({"S", "B", "Switch", "Bridge"})
+# IP phones advertise B,T (LLDP) or "Host Phone Two-port Mac Relay" (CDP): a bridge in name only.
+_PHONE_CAPABILITIES = frozenset({"T", "Phone", "Telephone"})
 
 
 @dataclass(frozen=True)
@@ -77,6 +79,8 @@ class Neighbor:
 
     @property
     def is_bridge(self) -> bool:
+        if self.capabilities & _PHONE_CAPABILITIES:
+            return False
         return bool(self.capabilities & _BRIDGE_CAPABILITIES)
 
 
