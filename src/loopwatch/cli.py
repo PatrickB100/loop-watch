@@ -12,13 +12,13 @@ import click
 
 from loopwatch.collector import MAX_SESSIONS, poll_once, run_collector, utcnow
 from loopwatch.inventory import Inventory, InventoryError, load_inventory
+from loopwatch.profiles import profile_for, version_of
 from loopwatch.report.render import build_report, render_html, render_text
 from loopwatch.store import Store
 from loopwatch.transport import FakeTransport, NetmikoTransport, RecordingTransport, Transport, TransportError
 
 SNAPSHOT_WINDOW = timedelta(minutes=15)
 _SINCE = re.compile(r"^(\d+)([mhd])$")
-_VERSION = re.compile(r"Version ([^,\s]+)")
 
 
 def parse_since(text: str) -> timedelta:
@@ -149,18 +149,19 @@ def snapshot(ctx: click.Context, switches: tuple[str, ...], record_dir: Path | N
 @click.option("--transport-fixtures", type=click.Path(path_type=Path), default=None, hidden=True)
 @click.pass_context
 def check_inventory(ctx: click.Context, transport_fixtures: Path | None) -> None:
-    """Connect to every switch once and run `show version`."""
+    """Connect to every device once and read its software version."""
     inv = _inventory(ctx.obj["inventory_path"])
     transport = _transport(transport_fixtures)
     failed = 0
     for sw in inv.switches:
+        profile = profile_for(sw.device_type)
         try:
-            out = transport.run(sw, inv.credentials, ["show version"])
+            out = transport.run(sw, inv.credentials, [profile.version_command])
         except TransportError as exc:
             failed += 1
             click.echo(f"{sw.name:<24} FAIL {exc.message}")
             continue
-        m = _VERSION.search(out["show version"])
-        click.echo(f"{sw.name:<24} ok   {m.group(1) if m else 'version unknown'}")
+        version = version_of(profile, out[profile.version_command])
+        click.echo(f"{sw.name:<24} ok   {version or 'version unknown'}")
     if failed:
         sys.exit(1)

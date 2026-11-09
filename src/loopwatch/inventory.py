@@ -44,7 +44,9 @@ class Switch:
 
     @property
     def commands(self) -> tuple[str, ...]:
-        return tuple(c for c in COMMANDS if c not in self.skip)
+        from loopwatch.profiles import profile_for  # profiles imports this module; resolve at call time
+
+        return tuple(c for c in profile_for(self.device_type).commands if c not in self.skip)
 
 
 @dataclass(frozen=True)
