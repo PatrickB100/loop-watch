@@ -4,3 +4,4 @@
 *.sqlite-shm
 __pycache__/
 .venv/
+.superpowers/
