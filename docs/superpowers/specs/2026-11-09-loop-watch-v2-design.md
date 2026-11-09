@@ -189,9 +189,35 @@ Supporting changes:
   prefix renders as "unknown vendor". `netaddr` is the second new
   dependency after `aiohttp`.
 
+### Wireless-to-wired loops
+
+A device that bridges Wi-Fi and Ethernet (a laptop with both links, an
+access point in client-bridge mode, a consumer router) makes a loop that
+spanning tree never sees, because access points do not forward BPDUs. The
+signal is MAC flaps between the port of the access point and the port of
+the bridging device, followed by a storm that builds more slowly than a
+wired loop because Wi-Fi limits the rate. To rank and name it:
+
+- **AP ports.** A port is an AP port when its CDP/LLDP neighbour has
+  capability `W` (wlan-ap) or when it is listed in the device's `ap_ports`
+  (new optional inventory key, a list of port names, also a field on the
+  device form). AP ports score half, like uplinks, because the flaps there
+  are the symptom; the ranking carries the `ap` label as it carries
+  `uplink`.
+- **Pattern.** When the flaps in the window pair one AP port with one
+  non-AP, non-uplink port, the diagnosis names it: "wireless-to-wired
+  bridge on <switch> <port>", and the connected-device table below it
+  shows what hangs on that port.
+- **Same host on both sides.** A laptop has one MAC per adapter. When a
+  flapping MAC and a MAC learned on the suspect port resolve to the same
+  DHCP hostname in `hosts`, the diagnosis adds "<hostname> is on both
+  sides: its Wi-Fi and wired adapters are bridged". This is the strongest
+  evidence the tool can give and is shown first when present.
+
 Limits, stated in the report text: without DHCP leases or LLDP the device
 is known only by MAC and vendor; a loop made by one cable between two wall
-ports has no new device at all, only the two ports.
+ports has no new device at all, only the two ports; without AP ports known
+the wireless pattern is reported as plain MAC flaps between two ports.
 
 ## Credentials
 
@@ -205,6 +231,7 @@ the database, logs or the page.
 - Inventory entries get `credentials: <name>`, default `ssh`, overridable in
   `defaults`. Loading fails with a clear message when an entry names a set
   the environment does not define.
+- `Switch` also gains `ap_ports: frozenset[str]` (normalised port names).
 - `Inventory.credentials_for(switch) -> Credentials` replaces the single
   `Inventory.credentials`. `Credentials.__repr__` keeps redacting.
 - The web page shows set names only, in a select, read from the
@@ -279,7 +306,7 @@ file, no JavaScript framework. Every page works on a phone width.
 | `/` | GET | Each device: name, type, host, last poll time, reachable or not, events in the last hour, high-severity count. Top five suspects of the last two hours. Links to `/report?since=15m`, `2h`, `24h`, `7d`. The inventory load error if there is one. |
 | `/report` | GET | `since=` (`15m`, `2h`, `1d`) or `from=` and `to=` (local ISO times). Suspects, chain, timeline, as the v1 HTML report, plus a Log section listing stored log lines of the window for all devices. |
 | `/devices` | GET | Table of devices with edit links and an Add button. |
-| `/devices/new` | GET, POST | Form: name, host, device type (select), credential set (select), poll interval, skip (checkboxes from the profile). POST validates, saves, sets `reload`, redirects to `/devices`. |
+| `/devices/new` | GET, POST | Form: name, host, device type (select), credential set (select), poll interval, access-point ports (text, comma separated), skip (checkboxes from the profile). POST validates, saves, sets `reload`, redirects to `/devices`. |
 | `/devices/{name}` | GET, POST | Same form, prefilled. Renaming is editing the name field. |
 | `/devices/{name}/delete` | POST | Removes the device from the file. Its history stays in the database. |
 | `/devices/{name}/test` | POST | Runs the profile's version command through the transport in a thread and shows version or the redacted error. 30 s budget. |
@@ -350,7 +377,10 @@ Storage and all comparisons stay UTC.
 - Diagnosis: scenario with LLDP neighbour on the port; scenario without
   neighbour but with MACs learned on the port before the loop and DHCP
   leases from a router fixture; the two-ports cable case; a window with no
-  suspects returns `None`; vendor lookup for a known and an unknown prefix.
+  suspects returns `None`; vendor lookup for a known and an unknown prefix;
+  wireless pattern: flaps between an AP port (via LLDP `W` and via
+  `ap_ports`) and an access port rank the access port first and name the
+  bridge; same-hostname-two-MACs adds the bridged-adapters line.
 - Store: `other_port` column added to a v1 database on `init_schema`.
 - No test opens a network connection or needs Docker.
 
