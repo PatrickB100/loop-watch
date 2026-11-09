@@ -7,15 +7,27 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta, tzinfo
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from aiohttp import web
 from jinja2 import ChoiceLoader, Environment, PackageLoader
 
 from loopwatch.collector import utcnow
-from loopwatch.inventory import Inventory, InventoryError, Switch, load_inventory
+from loopwatch.inventory import (
+    Inventory,
+    InventoryError,
+    Switch,
+    credential_sets_from_env,
+    load_inventory,
+    parse_inventory,
+    save_inventory,
+    validate_device,
+)
+from loopwatch.ports import normalize_port
+from loopwatch.profiles import PROFILES, profile_for, version_of
 from loopwatch.report.render import build_report, jinja_env
 from loopwatch.store import Store
-from loopwatch.transport import Transport
+from loopwatch.transport import Transport, TransportError
 
 CTX_KEY: web.AppKey["WebContext"] = web.AppKey("ctx")
 JINJA_KEY: web.AppKey[Environment] = web.AppKey("jinja")
@@ -142,13 +154,149 @@ async def healthz(request: web.Request) -> web.Response:
     return web.json_response(body, status=200 if alive else 503)
 
 
+# --- devices ---------------------------------------------------------------
+
+def _form_switch(form: Mapping[str, str], skip: list[str]) -> tuple[Switch, list[str]]:
+    """A Switch from posted fields plus the problems the field types themselves raise."""
+    problems: list[str] = []
+    try:
+        interval = int(form.get("poll_interval", "").strip() or 0)
+    except ValueError:
+        interval = 0
+        problems.append("Poll interval must be a whole number of seconds")
+    ap_ports = frozenset(normalize_port(p) for p in re.split(r"[,\s]+", form.get("ap_ports", "")) if p)
+    switch = Switch(
+        name=form.get("name", "").strip(),
+        host=form.get("host", "").strip(),
+        device_type=form.get("device_type", "").strip(),
+        poll_interval=interval,
+        skip=frozenset(skip),
+        credentials=form.get("credentials", "").strip(),
+        ap_ports=ap_ports,
+    )
+    return switch, problems
+
+
+def _form_values(ctx: WebContext, switch: Switch | None, **extra: object) -> dict[str, object]:
+    return {
+        "switch": switch,
+        "credential_sets": sorted(credential_sets_from_env(ctx.env)),
+        "device_types": sorted(t for p in PROFILES for t in p.device_types),
+        "families": [(p.family, sorted(p.device_types), p.commands) for p in PROFILES],
+        "errors": [],
+        "test_result": None,
+        **extra,
+    }
+
+
+def _find(switches: list[Switch], name: str) -> Switch:
+    for s in switches:
+        if s.name == name:
+            return s
+    raise web.HTTPNotFound(text=f"no device named {name!r}")
+
+
+async def devices(request: web.Request) -> web.Response:
+    ctx: WebContext = request.app[CTX_KEY]
+
+    def gather():
+        switches, _ = parse_inventory(ctx.inventory_path)
+        sets = credential_sets_from_env(ctx.env).keys()
+        return [(s, validate_device(s, sets)) for s in switches]
+
+    try:
+        rows = await asyncio.to_thread(gather)
+        error = None
+    except InventoryError as exc:
+        rows, error = [], str(exc)
+    return _render(request, "devices.html.j2", rows=rows, error=error)
+
+
+async def device_form(request: web.Request) -> web.Response:
+    ctx: WebContext = request.app[CTX_KEY]
+    name = request.match_info.get("name")
+    switches, _ = await asyncio.to_thread(parse_inventory, ctx.inventory_path)
+    switch = _find(switches, name) if name else None
+    return _render(request, "device_form.html.j2", **_form_values(ctx, switch, is_new=name is None))
+
+
+async def device_save(request: web.Request) -> web.Response:
+    ctx: WebContext = request.app[CTX_KEY]
+    name = request.match_info.get("name")
+    form = await request.post()
+    switch, problems = _form_switch({k: str(v) for k, v in form.items()}, [str(v) for v in form.getall("skip", [])])
+    switches, defaults = await asyncio.to_thread(parse_inventory, ctx.inventory_path)
+    if name is not None:
+        _find(switches, name)
+    problems += validate_device(switch, credential_sets_from_env(ctx.env).keys())
+    if any(s.name == switch.name and s.name != name for s in switches):
+        problems.append(f"A device named {switch.name!r} already exists")
+    if problems:
+        values = _form_values(ctx, switch, is_new=name is None, errors=problems)
+        return _render(request, "device_form.html.j2", status=400, **values)
+    updated = [switch if s.name == name else s for s in switches] if name else [*switches, switch]
+    await asyncio.to_thread(save_inventory, ctx.inventory_path, updated, defaults)
+    ctx.reload.set()
+    raise web.HTTPSeeOther("/devices")
+
+
+async def device_delete(request: web.Request) -> web.Response:
+    ctx: WebContext = request.app[CTX_KEY]
+    name = request.match_info["name"]
+    switches, defaults = await asyncio.to_thread(parse_inventory, ctx.inventory_path)
+    _find(switches, name)
+    await asyncio.to_thread(save_inventory, ctx.inventory_path, [s for s in switches if s.name != name], defaults)
+    ctx.reload.set()
+    raise web.HTTPSeeOther("/devices")
+
+
+async def device_test(request: web.Request) -> web.Response:
+    ctx: WebContext = request.app[CTX_KEY]
+    name = request.match_info["name"]
+    switches, _ = await asyncio.to_thread(parse_inventory, ctx.inventory_path)
+    switch = _find(switches, name)
+    sets = credential_sets_from_env(ctx.env)
+
+    def run() -> tuple[bool, str]:
+        if switch.credentials not in sets:
+            return False, f"credential set {switch.credentials!r} is not defined in the environment"
+        try:
+            profile = profile_for(switch.device_type)
+            out = ctx.transport.run(switch, sets[switch.credentials], [profile.version_command])
+        except (InventoryError, TransportError) as exc:
+            return False, getattr(exc, "message", str(exc))
+        return True, f"connected; version {version_of(profile, out[profile.version_command]) or 'unknown'}"
+
+    ok, message = await asyncio.to_thread(run)
+    values = _form_values(ctx, switch, is_new=False, test_result={"ok": ok, "message": message})
+    return _render(request, "device_form.html.j2", **values)
+
+
+@web.middleware
+async def same_origin(request: web.Request, handler):
+    """Refuse POSTs whose Origin names another host: the only guard, by decision, against a page
+    elsewhere on the LAN driving a browser that can reach this one."""
+    if request.method == "POST":
+        origin = request.headers.get("Origin")
+        if origin and urlsplit(origin).netloc != request.host:
+            raise web.HTTPForbidden(text="cross-origin request refused")
+    return await handler(request)
+
+
 def create_app(ctx: WebContext) -> web.Application:
-    app = web.Application()
+    app = web.Application(middlewares=[same_origin])
     app[CTX_KEY] = ctx
     app[JINJA_KEY] = _env(ctx.tz)
     app.router.add_get("/", home)
     app.router.add_get("/report", report)
     app.router.add_get("/healthz", healthz)
+    app.router.add_get("/devices", devices)
+    app.router.add_get("/devices/new", device_form)
+    app.router.add_post("/devices/new", device_save)
+    app.router.add_get("/devices/{name}", device_form)
+    app.router.add_post("/devices/{name}", device_save)
+    app.router.add_post("/devices/{name}/delete", device_delete)
+    app.router.add_post("/devices/{name}/test", device_test)
     app.router.add_static("/static/", path=str(_STATIC), name="static")
     return app
 

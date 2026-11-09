@@ -144,13 +144,19 @@ def _entry(entry: Mapping[str, object], defaults: Mapping[str, object]) -> Switc
     )
 
 
-def load_inventory(path: Path, env: Mapping[str, str]) -> Inventory:
-    """Read the device list; a missing file is an empty inventory. Credentials come from `env` only."""
-    sets = credential_sets_from_env(env)
+def parse_inventory(path: Path) -> tuple[list[Switch], Mapping[str, object]]:
+    """Read the file without validating devices, so an editor can open and fix a broken entry.
+    A missing file is an empty list. Raises InventoryError for unreadable YAML, entries without
+    name and host, and duplicate names."""
     path = Path(path)
     if not path.exists():
-        return Inventory((), sets, {})
-    data = yaml.safe_load(path.read_text()) or {}
+        return [], {}
+    try:
+        data = yaml.safe_load(path.read_text()) or {}
+    except yaml.YAMLError as exc:
+        raise InventoryError(f"{path.name} is not valid YAML: {exc}") from None
+    if not isinstance(data, Mapping):
+        raise InventoryError(f"{path.name} must be a mapping with a 'switches' list")
     defaults: Mapping[str, object] = data.get("defaults") or {}
     switches: list[Switch] = []
     seen: set[str] = set()
@@ -159,10 +165,19 @@ def load_inventory(path: Path, env: Mapping[str, str]) -> Inventory:
         if switch.name in seen:
             raise InventoryError(f"duplicate switch name: {switch.name}")
         seen.add(switch.name)
+        switches.append(switch)
+    return switches, defaults
+
+
+def load_inventory(path: Path, env: Mapping[str, str]) -> Inventory:
+    """Read and validate the device list; a missing file is an empty inventory. Credentials come
+    from `env` only."""
+    sets = credential_sets_from_env(env)
+    switches, defaults = parse_inventory(path)
+    for switch in switches:
         problems = validate_device(switch, sets.keys())
         if problems:
             raise InventoryError(f"device {switch.name!r}: " + "; ".join(problems))
-        switches.append(switch)
     return Inventory(tuple(switches), sets, defaults)
 
 

@@ -1,4 +1,5 @@
 import asyncio
+from dataclasses import replace
 from datetime import timedelta, timezone
 
 import pytest
@@ -64,13 +65,11 @@ async def client_empty(aiohttp_client, tmp_path):
 
 @pytest.fixture
 async def client_with_error(aiohttp_client, ctx):
-    ctx.inventory_error = lambda: "bad yaml"
-    return await aiohttp_client(create_app(ctx))
+    return await aiohttp_client(create_app(replace(ctx, inventory_error=lambda: "bad yaml")))
 
 
 @pytest.fixture
 async def client_unreachable(aiohttp_client, ctx, tmp_path):
     (tmp_path / "fx" / "sw-a").mkdir(parents=True)
     (tmp_path / "fx" / "sw-a" / "UNREACHABLE").touch()
-    ctx.transport = FakeTransport(tmp_path / "fx")
-    return await aiohttp_client(create_app(ctx))
+    return await aiohttp_client(create_app(replace(ctx, transport=FakeTransport(tmp_path / "fx"))))
