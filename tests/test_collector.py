@@ -174,3 +174,19 @@ def test_poll_once_upserts_dhcp_hosts(store, creds):
     inv = Inventory((ccr,), {"mikrotik": creds})
     poll_once(ccr, inv, fake, store, None, NOW)
     assert store.hosts_for({"a4b1.c2d3.e4f5"})["a4b1.c2d3.e4f5"].hostname == "tp-link-switch"
+
+
+def test_poll_once_passes_a_total_packet_baseline(store, inv, fake, monkeypatch):
+    import loopwatch.collector as collector
+
+    seen = {}
+    real = collector.run_detectors
+
+    def spy(ctx):
+        seen["total"] = ctx.baseline_total_pps
+        return real(ctx)
+
+    monkeypatch.setattr(collector, "run_detectors", spy)
+    for i in range(4):  # the baseline is a median of rates and needs two rates, so three earlier polls
+        poll_once(inv.by_name("sw-a"), inv, fake, store, None, NOW + timedelta(seconds=60 * i))
+    assert seen["total"] and all(v >= 0 for v in seen["total"].values())

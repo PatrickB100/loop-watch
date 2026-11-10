@@ -182,3 +182,11 @@ def test_events_window_with_offset_bounds_is_compared_in_utc(store):
     until = (NOW - timedelta(minutes=20)).astimezone(ams)   # 10:40 local, 09:40 UTC
     assert len(store.events(since, until)) == 1
     assert store.events(since.replace(tzinfo=_tz.utc), until.replace(tzinfo=_tz.utc)) == []  # 10:20-10:40 UTC: empty
+
+
+def test_counter_history_total_packets(store, snap_a):
+    store.record_poll("sw-a", "10.0.0.5", NOW, NOW, snap_a, None)
+    bcast = store.counter_history("sw-a", NOW - timedelta(minutes=1))
+    total = store.counter_history("sw-a", NOW - timedelta(minutes=1), total=True)
+    port = next(i for i in snap_a.interfaces if i.in_pkts > 0)
+    assert total[port.port][0][1] == port.in_pkts and bcast[port.port][0][1] == port.in_bcast + port.in_mcast

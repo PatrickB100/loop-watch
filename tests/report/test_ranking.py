@@ -77,3 +77,8 @@ def test_ap_ports_from_lldp_capability():
     n = {"sw-a": [Neighbor("Gi1/0/20", "office-ap-1", "eth0", "Ubiquiti", frozenset({"B", "W"})),
                   Neighbor("Gi1/0/48", "sw-core-1", "Te1/1/2", "cisco", frozenset({"S"}))]}
     assert ap_ports_from_neighbors(n) == {("sw-a", "Gi1/0/20")}
+
+
+def test_unicast_flood_scores_like_a_storm():
+    (s,) = rank_suspects([make_event("unicast_flood", "Gi1/0/7", 1, severity="high")], uplinks=set())
+    assert s.score == 30

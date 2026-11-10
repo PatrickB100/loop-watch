@@ -7,6 +7,7 @@ EVENT_KINDS: frozenset[str] = frozenset(
         "stp_role_change",
         "mac_flap",
         "broadcast_storm",
+        "unicast_flood",
         "unexpected_neighbor",
         "link_flap",
         "err_disable",

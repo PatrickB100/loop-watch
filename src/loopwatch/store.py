@@ -248,9 +248,11 @@ class Store:
         return ports
 
     @_locked
-    def counter_history(self, switch: str, since: datetime) -> dict[str, list[tuple[datetime, int]]]:
+    def counter_history(self, switch: str, since: datetime, total: bool = False) -> dict[str, list[tuple[datetime, int]]]:
+        """Per port, (poll time, counter) samples: broadcast+multicast by default, all input packets with `total`."""
+        column = "i.in_pkts" if total else "i.broadcast + i.multicast"
         rows = self.conn.execute(
-            "SELECT p.finished_at, i.name, i.broadcast + i.multicast FROM interfaces i "
+            f"SELECT p.finished_at, i.name, {column} FROM interfaces i "
             "JOIN polls p ON p.id = i.poll_id JOIN switches s ON s.id = p.switch_id "
             "WHERE s.name = ? AND p.ok = 1 AND p.finished_at >= ? ORDER BY p.finished_at, p.id",
             (switch, _iso(since)),

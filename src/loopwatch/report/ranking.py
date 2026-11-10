@@ -35,7 +35,7 @@ def _score(events: Sequence[Event]) -> int:
             score += 50
         elif e.kind == "mac_flap":
             macs.add(e.mac or e.reason)
-        elif e.kind == "broadcast_storm":
+        elif e.kind in ("broadcast_storm", "unicast_flood"):
             score += 30
         elif e.kind == "stp_topology_change":
             tc += 10
