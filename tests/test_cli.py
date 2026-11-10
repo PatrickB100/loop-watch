@@ -91,7 +91,11 @@ def test_report_from_to(seeded_db_path):
 
 def test_report_html_writes_file(tmp_path, seeded_db_path):
     out = tmp_path / "report.html"
-    r = CliRunner().invoke(main, ["--db", str(seeded_db_path), "report", "--since", "1d", "--html", str(out)])
+    # The seeded event sits at a fixed NOW; an explicit window keeps the test from ageing out.
+    since = (NOW - timedelta(hours=1)).isoformat()
+    until = NOW.isoformat()
+    r = CliRunner().invoke(main, ["--db", str(seeded_db_path), "report", "--from", since, "--to", until,
+                                  "--html", str(out)])
     assert r.exit_code == 0, r.output
     assert out.exists() and "<table" in out.read_text()
 
